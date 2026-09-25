@@ -1,0 +1,17 @@
+[
+  { "fi": "hei", "ru": "привет", "category": "Приветствия", "example": "Hei! Mitä kuuluu?" },
+  { "fi": "kiitos", "ru": "спасибо", "category": "Приветствия", "example": "Kiitos paljon!" },
+  { "fi": "näkemiin", "ru": "до свидания", "category": "Приветствия", "example": "Näkemiin, huomenna nähdään." },
+  { "fi": "anteeksi", "ru": "извините", "category": "Приветствия", "example": "Anteeksi, missä on asema?" },
+  { "fi": "yksi", "ru": "один", "category": "Числа", "example": "Minulla on yksi kissa." },
+  { "fi": "kaksi", "ru": "два", "category": "Числа", "example": "Kaksi kahvia, kiitos." },
+  { "fi": "kolme", "ru": "три", "category": "Числа", "example": "Kolme päivää." },
+  { "fi": "vesi", "ru": "вода", "category": "Еда и напитки", "example": "Saisinko vettä?" },
+  { "fi": "leipä", "ru": "хлеб", "category": "Еда и напитки", "example": "Ostan leipää kaupasta." },
+  { "fi": "kahvi", "ru": "кофе", "category": "Еда и напитки", "example": "Suomalaiset juovat paljon kahvia." },
+  { "fi": "talo", "ru": "дом", "category": "Повседневное", "example": "Tämä on minun taloni." },
+  { "fi": "kirja", "ru": "книга", "category": "Повседневное", "example": "Luen kirjaa." },
+  { "fi": "järvi", "ru": "озеро", "category": "Природа", "example": "Suomessa on paljon järviä." },
+  { "fi": "metsä", "ru": "лес", "category": "Природа", "example": "Kävelen metsässä." },
+  { "fi": "lumi", "ru": "снег", "category": "Природа", "example": "Talvella on paljon lunta." }
+]

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Suomea — учим финский</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="header">
+    <h1>Suomea</h1>
+    <p class="subtitle">Карточки для изучения финских слов</p>
+  </header>
+
+  <main class="main">
+    <div class="controls">
+      <label for="category">Категория:</label>
+      <select id="category">
+        <option value="all">Все</option>
+      </select>
+    </div>
+
+    <div id="card" class="card" tabindex="0" aria-live="polite">
+      <div class="card-front">
+        <span id="word" class="word">…</span>
+        <span class="hint">Нажмите, чтобы увидеть перевод</span>
+      </div>
+      <div class="card-back">
+        <span id="translation" class="translation"></span>
+        <span id="example" class="example"></span>
+      </div>
+    </div>
+
+    <div class="buttons">
+      <button id="prev" type="button">← Назад</button>
+      <button id="shuffle" type="button">Перемешать</button>
+      <button id="next" type="button">Вперёд →</button>
+    </div>
+
+    <p id="progress" class="progress"></p>
+  </main>
+
+  <footer class="footer">
+    <p>Suomea · учим финский язык</p>
+  </footer>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
