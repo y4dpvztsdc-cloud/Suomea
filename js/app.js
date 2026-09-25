@@ -1,125 +1,223 @@
-(function () {
-  "use strict";
+let words = [];
+let queue = [];
+let idx = 0;
+let answered = false;
+let correctTotal = 0;
+// wordProgress[i] = array of true/false, in the order this word's reps were encountered (max 3)
+let wordProgress = [];
 
-  const state = {
-    words: [],
-    filtered: [],
-    index: 0,
-  };
-
-  const el = {
-    card: document.getElementById("card"),
-    word: document.getElementById("word"),
-    translation: document.getElementById("translation"),
-    example: document.getElementById("example"),
-    category: document.getElementById("category"),
-    prev: document.getElementById("prev"),
-    next: document.getElementById("next"),
-    shuffle: document.getElementById("shuffle"),
-    progress: document.getElementById("progress"),
-  };
-
-  async function loadWords() {
-    const response = await fetch("data/words.json");
-    if (!response.ok) {
-      throw new Error("HTTP " + response.status);
-    }
-    return response.json();
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
   }
+  return a;
+}
 
-  function fillCategories(words) {
-    const categories = [...new Set(words.map((w) => w.category))];
-    for (const category of categories) {
-      const option = document.createElement("option");
-      option.value = category;
-      option.textContent = category;
-      el.category.appendChild(option);
-    }
-  }
-
-  function applyFilter() {
-    const value = el.category.value;
-    state.filtered =
-      value === "all"
-        ? state.words.slice()
-        : state.words.filter((w) => w.category === value);
-    state.index = 0;
-    render();
-  }
-
-  function render() {
-    el.card.classList.remove("flipped");
-
-    if (state.filtered.length === 0) {
-      el.word.textContent = "Нет слов";
-      el.translation.textContent = "";
-      el.example.textContent = "";
-      el.progress.textContent = "";
-      return;
-    }
-
-    const item = state.filtered[state.index];
-    el.word.textContent = item.fi;
-    el.translation.textContent = item.ru;
-    el.example.textContent = item.example || "";
-    el.progress.textContent =
-      state.index + 1 + " / " + state.filtered.length;
-  }
-
-  function step(delta) {
-    const total = state.filtered.length;
-    if (total === 0) return;
-    state.index = (state.index + delta + total) % total;
-    render();
-  }
-
-  function shuffle() {
-    const arr = state.filtered;
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    state.index = 0;
-    render();
-  }
-
-  function flip() {
-    if (state.filtered.length > 0) {
-      el.card.classList.toggle("flipped");
-    }
-  }
-
-  function bindEvents() {
-    el.card.addEventListener("click", flip);
-    el.prev.addEventListener("click", () => step(-1));
-    el.next.addEventListener("click", () => step(1));
-    el.shuffle.addEventListener("click", shuffle);
-    el.category.addEventListener("change", applyFilter);
-
-    document.addEventListener("keydown", (event) => {
-      if (event.target === el.category) return;
-      if (event.key === "ArrowLeft") step(-1);
-      else if (event.key === "ArrowRight") step(1);
-      else if (event.key === " " || event.key === "Enter") {
-        event.preventDefault();
-        flip();
+function buildQueue() {
+  let reps = [];
+  words.forEach((w, i) => {
+    reps.push({ word: i, dir: 'ru-fi' });
+    reps.push({ word: i, dir: 'ru-fi' });
+    reps.push({ word: i, dir: 'fi-ru' });
+  });
+  reps = shuffle(reps);
+  // avoid the same word appearing twice in a row
+  for (let i = 1; i < reps.length; i++) {
+    if (reps[i].word === reps[i - 1].word) {
+      for (let j = i + 1; j < reps.length; j++) {
+        if (reps[j].word !== reps[i - 1].word && reps[j].word !== reps[i].word) {
+          [reps[i], reps[j]] = [reps[j], reps[i]];
+          break;
+        }
       }
-    });
-  }
-
-  async function init() {
-    bindEvents();
-    try {
-      state.words = await loadWords();
-      fillCategories(state.words);
-      applyFilter();
-    } catch (error) {
-      el.word.textContent = "Не удалось загрузить слова";
-      el.progress.textContent =
-        "Запустите проект через локальный сервер (см. README).";
-      console.error(error);
     }
   }
+  return reps;
+}
 
-  init();
-})();
+function pickOptionPool(direction, correctIndex) {
+  const correctGroup = words[correctIndex].group;
+  const sameGroup = words
+    .map((_, i) => i)
+    .filter(i => i !== correctIndex && words[i].group === correctGroup);
+  let distractors = shuffle(sameGroup).slice(0, 3);
+  if (distractors.length < 3) {
+    const rest = words
+      .map((_, i) => i)
+      .filter(i => i !== correctIndex && !distractors.includes(i));
+    const filler = shuffle(rest).slice(0, 3 - distractors.length);
+    distractors = distractors.concat(filler);
+  }
+  const all = shuffle([correctIndex, ...distractors]);
+  return all.map(i => ({
+    index: i,
+    label: direction === 'ru-fi' ? words[i].fi : words[i].ru
+  }));
+}
+
+function speakFinnish(text, rate) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'fi-FI';
+  u.rate = rate || 0.9;
+  window.speechSynthesis.speak(u);
+}
+
+function renderTracker(wordIndex) {
+  const progress = wordProgress[wordIndex];
+  let slots = '';
+  for (let i = 0; i < 3; i++) {
+    if (i < progress.length) {
+      slots += `<div class="slot ${progress[i] ? 'correct' : 'wrong'}">${progress[i] ? '&#10003;' : '&#10005;'}</div>`;
+    } else {
+      slots += `<div class="slot"></div>`;
+    }
+  }
+  return `
+    <div class="word-tracker">
+      <div class="tracker-slots">${slots}</div>
+    </div>
+  `;
+}
+
+function renderTrain() {
+  if (idx >= queue.length) {
+    document.getElementById('header-title').textContent = 'Новые слова';
+    const pct = Math.round((correctTotal / queue.length) * 100);
+    document.getElementById('app-body').innerHTML = `
+      <div class="done-screen">
+        <div class="big">&#127942;</div>
+        <h2>Урок пройден</h2>
+        <p>Точность: ${pct}% (${correctTotal} из ${queue.length})</p>
+        <button class="restart-btn" onclick="restart()">Повторить урок</button>
+      </div>
+    `;
+    return;
+  }
+
+  const rep = queue[idx];
+  const word = words[rep.word];
+  answered = false;
+
+  const promptText = rep.dir === 'ru-fi' ? word.ru : word.fi;
+  const options = pickOptionPool(rep.dir, rep.word);
+  const overallPct = Math.round((idx / queue.length) * 100);
+
+  document.getElementById('header-title').textContent = 'Новые слова';
+  document.getElementById('app-body').innerHTML = `
+    <div class="content">
+      ${renderTracker(rep.word)}
+      <div class="word-stage">
+        <div class="word-fi">${promptText}</div>
+      </div>
+      <div class="options" id="options-grid">
+        ${options.map(o => `<div class="option" data-i="${o.index}">${o.label}</div>`).join('')}
+      </div>
+      <div class="feedback" id="feedback"></div>
+    </div>
+    <div class="progress-row">
+      <div class="progress-pct">${overallPct}%</div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${overallPct}%"></div></div>
+    </div>
+  `;
+
+  document.querySelectorAll('.option').forEach(el => {
+    el.addEventListener('click', () => handleAnswer(el, rep));
+  });
+}
+
+function handleAnswer(el, rep) {
+  if (answered) return;
+  answered = true;
+  const chosen = parseInt(el.dataset.i, 10);
+  const isCorrect = chosen === rep.word;
+  const feedback = document.getElementById('feedback');
+  document.querySelectorAll('.option').forEach(o => o.classList.add('disabled'));
+
+  wordProgress[rep.word].push(isCorrect);
+  if (isCorrect) correctTotal++;
+
+  const fiWord = words[rep.word].fi;
+
+  if (isCorrect) {
+    el.classList.add('correct');
+    feedback.className = 'feedback correct-text';
+    feedback.innerHTML = `Верно! <span class="fi-echo">${speakerIcon()} ${fiWord}</span>`;
+  } else {
+    el.classList.add('wrong');
+    document.querySelector(`.option[data-i="${rep.word}"]`).classList.add('correct');
+    feedback.className = 'feedback wrong-text';
+    feedback.innerHTML = `Правильный вариант выделен зелёным <span class="fi-echo">${speakerIcon()} ${fiWord}</span>`;
+  }
+
+  speakFinnish(fiWord, words[rep.word].rate);
+
+  const btn = feedback.querySelector('.speaker-btn-inline');
+  if (btn) btn.addEventListener('click', () => speakFinnish(fiWord, words[rep.word].rate));
+
+  setTimeout(() => {
+    idx++;
+    renderTrain();
+  }, 1400);
+}
+
+function speakerIcon() {
+  return `<button class="speaker-btn-inline"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg></button>`;
+}
+
+function restart() {
+  queue = buildQueue();
+  idx = 0;
+  correctTotal = 0;
+  wordProgress = words.map(() => []);
+  renderTrain();
+}
+
+function renderList() {
+  document.getElementById('header-title').textContent = 'Список слов';
+  document.getElementById('app-body').innerHTML = `
+    <div class="wordlist">
+      ${words.map(w => `
+        <div class="wordlist-row">
+          <span class="fi">${w.fi}</span>
+          <span class="ru">${w.ru}</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+document.getElementById('nav-train').addEventListener('click', () => {
+  document.getElementById('nav-train').classList.add('active');
+  document.getElementById('nav-list').classList.remove('active');
+  renderTrain();
+});
+
+document.getElementById('nav-list').addEventListener('click', () => {
+  document.getElementById('nav-list').classList.add('active');
+  document.getElementById('nav-train').classList.remove('active');
+  renderList();
+});
+
+async function init() {
+  try {
+    const response = await fetch('data/words.json');
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    words = await response.json();
+  } catch (error) {
+    console.error(error);
+    document.getElementById('app-body').innerHTML = `
+      <div class="done-screen">
+        <h2>Не удалось загрузить слова</h2>
+        <p>Запустите проект через локальный сервер (см. README).</p>
+      </div>
+    `;
+    return;
+  }
+  restart();
+}
+
+init();
