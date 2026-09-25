@@ -1,0 +1,107 @@
+const { test, expect } = require('@playwright/test');
+const words = require('../data/words.json');
+
+// Текущее задание из глобального состояния app.js
+const currentRep = page => page.evaluate(() => queue[idx]);
+
+test.beforeEach(async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.option')).toHaveCount(4);
+});
+
+test('стартовый экран: слово, 4 варианта, прогресс 0%', async ({ page }) => {
+  await expect(page.locator('#header-title')).toHaveText('Новые слова');
+  await expect(page.locator('.word-fi')).not.toBeEmpty();
+  await expect(page.locator('.slot')).toHaveCount(3);
+  await expect(page.locator('.progress-pct')).toHaveText('0%');
+});
+
+test('варианты разные и среди них есть правильный', async ({ page }) => {
+  const rep = await currentRep(page);
+  const word = words[rep.word];
+  const labels = await page.locator('.option').allTextContents();
+  expect(new Set(labels).size).toBe(4);
+  expect(labels).toContain(rep.dir === 'ru-fi' ? word.fi : word.ru);
+  await expect(page.locator('.word-fi')).toHaveText(rep.dir === 'ru-fi' ? word.ru : word.fi);
+});
+
+test('верный ответ подсвечивается зелёным и засчитывается', async ({ page }) => {
+  const rep = await currentRep(page);
+  const option = page.locator(`.option[data-i="${rep.word}"]`);
+  await option.click();
+  await expect(option).toHaveClass(/correct/);
+  await expect(page.locator('#feedback')).toContainText('Верно!');
+  await expect(page.locator('#feedback')).toContainText(words[rep.word].fi);
+  expect(await page.evaluate(w => wordProgress[w], rep.word)).toEqual([true]);
+  expect(await page.evaluate(() => correctTotal)).toBe(1);
+});
+
+test('неверный ответ красный, правильный показан зелёным', async ({ page }) => {
+  const rep = await currentRep(page);
+  const wrong = page.locator(`.option:not([data-i="${rep.word}"])`).first();
+  await wrong.click();
+  await expect(wrong).toHaveClass(/wrong/);
+  await expect(page.locator(`.option[data-i="${rep.word}"]`)).toHaveClass(/correct/);
+  await expect(page.locator('#feedback')).toContainText('Правильный вариант выделен зелёным');
+  expect(await page.evaluate(w => wordProgress[w], rep.word)).toEqual([false]);
+  expect(await page.evaluate(() => correctTotal)).toBe(0);
+});
+
+test('после ответа варианты блокируются, затем следующее задание', async ({ page }) => {
+  await page.locator('.option').first().click();
+  await page.locator('.option').nth(1).click({ force: true });
+  expect(await page.evaluate(() => wordProgress.flat().length)).toBe(1);
+  await expect(page.locator('.progress-pct')).not.toHaveText('0%');
+  expect(await page.evaluate(() => idx)).toBe(1);
+  await expect(page.locator('.option.disabled')).toHaveCount(0);
+});
+
+test('кружки над словом показывают прошлые ответы по нему', async ({ page }) => {
+  await page.evaluate(() => {
+    wordProgress[queue[idx].word] = [true, false];
+    renderTrain();
+  });
+  await expect(page.locator('.slot').nth(0)).toHaveClass(/correct/);
+  await expect(page.locator('.slot').nth(1)).toHaveClass(/wrong/);
+  await expect(page.locator('.slot').nth(2)).toHaveClass('slot');
+});
+
+test('каждое слово встречается 3 раза: 2× ru→fi и 1× fi→ru', async ({ page }) => {
+  const queue = await page.evaluate(() => queue);
+  expect(queue.length).toBe(words.length * 3);
+  words.forEach((_, i) => {
+    const reps = queue.filter(r => r.word === i);
+    expect(reps.filter(r => r.dir === 'ru-fi')).toHaveLength(2);
+    expect(reps.filter(r => r.dir === 'fi-ru')).toHaveLength(1);
+  });
+});
+
+test('список слов показывает весь словарь', async ({ page }) => {
+  await page.click('#nav-list');
+  await expect(page.locator('#header-title')).toHaveText('Список слов');
+  await expect(page.locator('#nav-list')).toHaveClass(/active/);
+  await expect(page.locator('.wordlist-row')).toHaveCount(words.length);
+  await expect(page.locator('.wordlist-row').first()).toContainText(words[0].fi);
+
+  await page.click('#nav-train');
+  await expect(page.locator('.option')).toHaveCount(4);
+});
+
+test('экран окончания урока и повтор', async ({ page }) => {
+  await page.evaluate(() => { idx = queue.length - 1; renderTrain(); });
+  const rep = await currentRep(page);
+  await page.locator(`.option[data-i="${rep.word}"]`).click();
+
+  await expect(page.locator('.done-screen h2')).toHaveText('Урок пройден');
+  await expect(page.locator('.done-screen p')).toContainText(`из ${words.length * 3}`);
+
+  await page.click('.restart-btn');
+  await expect(page.locator('.option')).toHaveCount(4);
+  await expect(page.locator('.progress-pct')).toHaveText('0%');
+});
+
+test('сообщение об ошибке, если словарь не загрузился', async ({ page }) => {
+  await page.route('**/data/words.json', route => route.abort());
+  await page.goto('/');
+  await expect(page.locator('.done-screen h2')).toHaveText('Не удалось загрузить слова');
+});
