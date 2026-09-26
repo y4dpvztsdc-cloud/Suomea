@@ -55,6 +55,26 @@ body {
   text-align: center;
   margin-right: 28px;
 }
+.voice-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: var(--wrong-bg);
+  color: var(--wrong);
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 10px 12px 10px 16px;
+}
+.voice-warning[hidden] { display: none; }
+.voice-warning-close {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
 #app-body {
   flex: 1;
   display: flex;
