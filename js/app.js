@@ -2,9 +2,22 @@ let words = [];
 let queue = [];
 let idx = 0;
 let answered = false;
-let correctTotal = 0;
-// wordProgress[i] = array of true/false, in the order this word's reps were encountered (max 3)
+let correctTotal = 0; // выполненные задания: засчитываются только верные ответы
+let mistakes = 0;
+// wordProgress[i] = true/false по каждому заданию слова в порядке появления (максимум 3).
+// false (красный крестик) меняется на true (синяя галочка), когда задание пройдено при повторе.
 let wordProgress = [];
+
+const REPS_PER_WORD = 3;
+const RETRY_GAP = 3; // через сколько заданий вернётся задание после ошибки
+
+function totalReps() {
+  return words.length * REPS_PER_WORD;
+}
+
+function progressPct() {
+  return Math.round((correctTotal / totalReps()) * 100);
+}
 
 function shuffle(arr) {
   const a = [...arr];
@@ -114,32 +127,55 @@ function speakFinnish(text, rate) {
   window.speechSynthesis.speak(u);
 }
 
-function renderTracker(wordIndex) {
+function renderSlots(wordIndex) {
   const progress = wordProgress[wordIndex];
   let slots = '';
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < REPS_PER_WORD; i++) {
     if (i < progress.length) {
       slots += `<div class="slot ${progress[i] ? 'correct' : 'wrong'}">${progress[i] ? '&#10003;' : '&#10005;'}</div>`;
     } else {
       slots += `<div class="slot"></div>`;
     }
   }
+  return slots;
+}
+
+function renderTracker(wordIndex) {
   return `
     <div class="word-tracker">
-      <div class="tracker-slots">${slots}</div>
+      <div class="tracker-slots">${renderSlots(wordIndex)}</div>
     </div>
   `;
+}
+
+// Возвращает задание в очередь через несколько шагов, не ставя его рядом с тем же словом
+function requeue(rep) {
+  for (let p = Math.min(idx + RETRY_GAP, queue.length); p <= queue.length; p++) {
+    const before = queue[p - 1];
+    const after = queue[p];
+    if ((!before || before.word !== rep.word) && (!after || after.word !== rep.word)) {
+      queue.splice(p, 0, rep);
+      return;
+    }
+  }
+  queue.push(rep);
+}
+
+function renderProgress() {
+  const pct = progressPct();
+  document.querySelector('.progress-pct').textContent = `${pct}%`;
+  document.querySelector('.progress-fill').style.width = `${pct}%`;
 }
 
 function renderTrain() {
   if (idx >= queue.length) {
     document.getElementById('header-title').textContent = 'Новые слова';
-    const pct = Math.round((correctTotal / queue.length) * 100);
+    const pct = Math.round((correctTotal / (correctTotal + mistakes)) * 100);
     document.getElementById('app-body').innerHTML = `
       <div class="done-screen">
         <div class="big">&#127942;</div>
         <h2>Урок пройден</h2>
-        <p>Точность: ${pct}% (${correctTotal} из ${queue.length})</p>
+        <p>Точность: ${pct}% (ошибок: ${mistakes})</p>
         <button class="restart-btn" onclick="restart()">Повторить урок</button>
       </div>
     `;
@@ -152,7 +188,7 @@ function renderTrain() {
 
   const promptText = rep.dir === 'ru-fi' ? word.ru : word.fi;
   const options = pickOptionPool(rep.dir, rep.word);
-  const overallPct = Math.round((idx / queue.length) * 100);
+  const overallPct = progressPct();
 
   document.getElementById('header-title').textContent = 'Новые слова';
   document.getElementById('app-body').innerHTML = `
@@ -185,8 +221,21 @@ function handleAnswer(el, rep) {
   const feedback = document.getElementById('feedback');
   document.querySelectorAll('.option').forEach(o => o.classList.add('disabled'));
 
-  wordProgress[rep.word].push(isCorrect);
-  if (isCorrect) correctTotal++;
+  const progress = wordProgress[rep.word];
+  if (rep.slot === undefined) {
+    rep.slot = progress.length;
+    progress.push(isCorrect);
+  } else if (isCorrect) {
+    progress[rep.slot] = true;
+  }
+  if (isCorrect) {
+    correctTotal++;
+  } else {
+    mistakes++;
+    requeue(rep);
+  }
+  document.querySelector('.tracker-slots').innerHTML = renderSlots(rep.word);
+  renderProgress();
 
   const fiWord = words[rep.word].fi;
 
@@ -220,6 +269,7 @@ function restart() {
   queue = buildQueue();
   idx = 0;
   correctTotal = 0;
+  mistakes = 0;
   wordProgress = words.map(() => []);
   renderTrain();
 }

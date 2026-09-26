@@ -34,6 +34,8 @@ test('верный ответ подсвечивается зелёным и з�
   await expect(page.locator('#feedback')).toContainText(words[rep.word].fi);
   expect(await page.evaluate(w => wordProgress[w], rep.word)).toEqual([true]);
   expect(await page.evaluate(() => correctTotal)).toBe(1);
+  await expect(page.locator('.slot').first()).toHaveClass(/correct/);
+  await expect(page.locator('.progress-pct')).not.toHaveText('0%');
 });
 
 test('неверный ответ красный, правильный показан зелёным', async ({ page }) => {
@@ -45,14 +47,52 @@ test('неверный ответ красный, правильный пока�
   await expect(page.locator('#feedback')).toContainText('Правильный вариант выделен зелёным');
   expect(await page.evaluate(w => wordProgress[w], rep.word)).toEqual([false]);
   expect(await page.evaluate(() => correctTotal)).toBe(0);
+  await expect(page.locator('.slot').first()).toHaveClass(/wrong/);
+});
+
+test('неверный ответ не двигает прогресс, задание возвращается позже', async ({ page }) => {
+  const rep = await currentRep(page);
+  const lengthBefore = await page.evaluate(() => queue.length);
+  await page.locator(`.option:not([data-i="${rep.word}"])`).first().click();
+  await expect(page.locator('.progress-pct')).toHaveText('0%');
+
+  const retryAt = await page.evaluate(() => queue.findIndex((r, k) => k > idx && r.slot !== undefined));
+  expect(await page.evaluate(() => queue.length)).toBe(lengthBefore + 1);
+  expect(retryAt).toBeGreaterThanOrEqual(3);
+  const neighbours = await page.evaluate(j => [queue[j - 1].word, queue[j + 1] && queue[j + 1].word], retryAt);
+  expect(neighbours).not.toContain(rep.word);
+
+  await page.waitForFunction(() => idx === 1);
+  await expect(page.locator('.progress-pct')).toHaveText('0%');
+});
+
+test('при повторе верный ответ меняет крестик на галочку и идёт в прогресс', async ({ page }) => {
+  const rep = await currentRep(page);
+  await page.locator(`.option:not([data-i="${rep.word}"])`).first().click();
+  await expect(page.locator('.slot').first()).toHaveClass(/wrong/);
+
+  // Переходим сразу к возвращённому заданию
+  await page.waitForFunction(() => idx === 1);
+  await page.evaluate(() => {
+    idx = queue.findIndex((r, k) => k > idx && r.slot !== undefined);
+    renderTrain();
+  });
+  expect((await currentRep(page)).word).toBe(rep.word);
+  await expect(page.locator('.slot').first()).toHaveClass(/wrong/);
+
+  await page.locator(`.option[data-i="${rep.word}"]`).click();
+  await expect(page.locator('.slot').first()).toHaveClass(/correct/);
+  await expect(page.locator('.slot.wrong')).toHaveCount(0);
+  expect(await page.evaluate(w => wordProgress[w], rep.word)).toEqual([true]);
+  expect(await page.evaluate(() => [correctTotal, mistakes])).toEqual([1, 1]);
+  await expect(page.locator('.progress-pct')).not.toHaveText('0%');
 });
 
 test('после ответа варианты блокируются, затем следующее задание', async ({ page }) => {
   await page.locator('.option').first().click();
   await page.locator('.option').nth(1).click({ force: true });
   expect(await page.evaluate(() => wordProgress.flat().length)).toBe(1);
-  await expect(page.locator('.progress-pct')).not.toHaveText('0%');
-  expect(await page.evaluate(() => idx)).toBe(1);
+  await page.waitForFunction(() => idx === 1);
   await expect(page.locator('.option.disabled')).toHaveCount(0);
 });
 
@@ -93,7 +133,7 @@ test('экран окончания урока и повтор', async ({ page }
   await page.locator(`.option[data-i="${rep.word}"]`).click();
 
   await expect(page.locator('.done-screen h2')).toHaveText('Урок пройден');
-  await expect(page.locator('.done-screen p')).toContainText(`из ${words.length * 3}`);
+  await expect(page.locator('.done-screen p')).toContainText('ошибок: 0');
 
   await page.click('.restart-btn');
   await expect(page.locator('.option')).toHaveCount(4);
