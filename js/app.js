@@ -7,6 +7,7 @@ let mistakes = 0;
 // wordProgress[i] = true/false по каждому заданию слова в порядке появления (максимум 3).
 // false (красный крестик) меняется на true (синяя галочка), когда задание пройдено при повторе.
 let wordProgress = [];
+let currentView = 'train'; // 'train' | 'sentences' | 'list'
 
 const REPS_PER_WORD = 3;
 const RETRY_GAP = 3; // через сколько заданий вернётся задание после ошибки
@@ -176,9 +177,11 @@ function renderTrain() {
         <div class="big">&#127942;</div>
         <h2>Урок пройден</h2>
         <p>Точность: ${pct}% (ошибок: ${mistakes})</p>
-        <button class="restart-btn" onclick="restart()">Повторить урок</button>
+        <button class="restart-btn" id="to-sentences">Дальше: предложения</button>
+        <button class="restart-btn secondary" onclick="restart()">Повторить слова</button>
       </div>
     `;
+    document.getElementById('to-sentences').addEventListener('click', () => showView('sentences'));
     return;
   }
 
@@ -257,7 +260,7 @@ function handleAnswer(el, rep) {
 
   setTimeout(() => {
     idx++;
-    renderTrain();
+    if (currentView === 'train') renderTrain();
   }, 1400);
 }
 
@@ -290,24 +293,39 @@ function renderList() {
 
 document.getElementById('voice-warning-close').addEventListener('click', () => setVoiceWarning(false));
 
-document.getElementById('nav-train').addEventListener('click', () => {
-  document.getElementById('nav-train').classList.add('active');
-  document.getElementById('nav-list').classList.remove('active');
-  renderTrain();
+const views = {
+  train: () => renderTrain(),
+  sentences: () => renderSentences(),
+  list: () => renderList(),
+};
+
+function showView(name) {
+  currentView = name;
+  Object.keys(views).forEach(v => {
+    document.getElementById(`nav-${v}`).classList.toggle('active', v === name);
+  });
+  views[name]();
+}
+
+Object.keys(views).forEach(v => {
+  document.getElementById(`nav-${v}`).addEventListener('click', () => showView(v));
 });
 
-document.getElementById('nav-list').addEventListener('click', () => {
-  document.getElementById('nav-list').classList.add('active');
-  document.getElementById('nav-train').classList.remove('active');
-  renderList();
-});
+async function loadJson(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(url + ': HTTP ' + response.status);
+  return response.json();
+}
 
 async function init() {
   initVoice();
   try {
-    const response = await fetch('data/words.json');
-    if (!response.ok) throw new Error('HTTP ' + response.status);
-    words = await response.json();
+    const [wordData, sentences] = await Promise.all([
+      loadJson('data/words.json'),
+      loadJson('data/sentences.json'),
+    ]);
+    words = wordData;
+    setSentenceData(sentences);
   } catch (error) {
     console.error(error);
     document.getElementById('app-body').innerHTML = `
@@ -319,6 +337,8 @@ async function init() {
     return;
   }
   restart();
+  startSentences();
+  showView('train');
 }
 
 init();

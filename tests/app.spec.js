@@ -135,9 +135,10 @@ test('экран окончания урока и повтор', async ({ page }
   await expect(page.locator('.done-screen h2')).toHaveText('Урок пройден');
   await expect(page.locator('.done-screen p')).toContainText('ошибок: 0');
 
-  await page.click('.restart-btn');
+  await page.click('text=Повторить слова');
   await expect(page.locator('.option')).toHaveCount(4);
   await expect(page.locator('.progress-pct')).toHaveText('0%');
+  await expect(page.locator('#header-title')).toHaveText('Новые слова');
 });
 
 test('сообщение об ошибке, если словарь не загрузился', async ({ page }) => {

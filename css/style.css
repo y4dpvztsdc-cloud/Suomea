@@ -291,3 +291,86 @@ body {
   font-weight: 600;
   cursor: pointer;
 }
+
+.restart-btn.secondary {
+  margin-top: 4px;
+  background: none;
+  color: var(--ice-dark);
+}
+.sentence-ru {
+  text-align: center;
+  font-size: 24px;
+  font-weight: 500;
+  margin: 8px 0 24px;
+}
+.built {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  min-height: 56px;
+  padding: 10px 0 14px;
+  margin-bottom: 20px;
+  border-bottom: 1.5px solid var(--border);
+}
+.chip {
+  font-size: 18px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  cursor: pointer;
+}
+.chip.placeholder {
+  width: 44px;
+  cursor: default;
+  background: none;
+  border-style: dashed;
+}
+.built.correct .chip {
+  background: var(--correct-bg);
+  border-color: var(--correct);
+  color: var(--correct);
+  cursor: default;
+}
+.built.wrong .chip {
+  background: var(--wrong-bg);
+  border-color: var(--wrong);
+  color: var(--wrong);
+  cursor: default;
+}
+.sentence-bottom {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.sentence-bottom .options { flex: 0 0 auto; }
+.sentence-result {
+  text-align: center;
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.sentence-result.correct-text { color: var(--correct); }
+.sentence-result.wrong-text { color: var(--wrong); }
+.sentence-answer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 20px;
+  margin-bottom: 20px;
+}
+.check-btn {
+  margin-top: auto;
+  margin-bottom: 8px;
+  width: 100%;
+  background: var(--ice);
+  color: white;
+  border: none;
+  padding: 14px;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
