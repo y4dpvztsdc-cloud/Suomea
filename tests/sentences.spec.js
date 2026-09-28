@@ -120,19 +120,26 @@ test.describe('составление предложений', () => {
     await expect(page.locator('#help')).toHaveText('Помощь');
   });
 
-  test('круг: 50 пар из утвердительных, вопрос идёт перед ответом', async ({ page }) => {
-    const round = await page.evaluate(() => {
-      const out = [];
-      for (let pos = 0; pos < 100; pos++) { ps.pos = pos; out.push(currentTask().fi); }
-      ps.pos = 0;
-      return out;
-    });
-    const affirmative = data.parts[0].pairs;
-    round.forEach((fi, i) => expect(fi.endsWith('?')).toBe(i % 2 === 0));
-    for (let k = 0; k < 50; k++) {
-      expect(affirmative).toContainEqual(expect.objectContaining({ q: expect.objectContaining({ fi: round[2 * k] }) }));
+  test('пары в случайном порядке, всегда сначала «а» (вопрос), затем «б» (ответ) той же пары', async ({ page }) => {
+    const pairs = data.parts[0].pairs;
+    const seen = [];
+    for (let i = 0; i < 6; i++) {
+      const q = await task(page);
+      await solve(page, true);
+      await tapEmpty(page);
+      const a = await task(page);
+      await solve(page, true);
+      await tapEmpty(page);
+      const pair = pairs.find(p => p.q.fi === q.fi);
+      expect(pair).toBeDefined();
+      expect(a.fi).toBe(pair.a.fi);
+      seen.push(pairs.indexOf(pair));
     }
-    expect(new Set(round.filter((_, i) => i % 2 === 0)).size).toBe(50);
+    expect(new Set(seen).size).toBe(6);
+    // Порядок пар — случайный, а не по номерам
+    const pool = await page.evaluate(() => ps.pool);
+    expect(pool).toHaveLength(200);
+    expect(pool).not.toEqual([...pool].sort((x, y) => x - y));
   });
 
   test('варианты: правильное слово и 5 слов из той же группы', async ({ page }) => {
@@ -218,40 +225,53 @@ test.describe('составление предложений', () => {
     expect(await page.evaluate(() => window.__spoken)).toEqual([t.fi]);
     await expect(page.locator('#stat-wrong')).toHaveText('1');
     await expect(page.locator('.cell').first()).toHaveClass(/err/);
-
-    // Клетка остаётся красной, идём дальше
-    await tapEmpty(page);
-    expect(await page.evaluate(() => ps.pos)).toBe(1);
-    await expect(page.locator('.cell').first()).toHaveClass(/err/);
   });
 
-  test('второй круг: пара с ошибкой возвращается, верный ответ красит клетку в голубой', async ({ page }) => {
-    const first = await task(page);
+  test('после ошибки то же предложение ещё раз; красная клетка остаётся меткой', async ({ page }) => {
+    const t = await task(page);
     await solve(page, false);
     await tapEmpty(page);
-    const keptPair = await page.evaluate(() => ps.slots[0]);
-    const otherPair = await page.evaluate(() => ps.slots[1]);
+    expect((await task(page)).fi).toBe(t.fi);
+    await expect(page.locator('.cell').nth(0)).toHaveClass(/err/);
+    await expect(page.locator('.cell').nth(1)).toHaveClass(/current/);
 
-    // Доходим до конца круга
+    await solve(page, true);
+    await expect(page.locator('.cell').nth(0)).toHaveClass(/err/);
+    await expect(page.locator('.cell').nth(1)).toHaveClass(/ok/);
+    await tapEmpty(page);
+    // Дальше — ответ «б» той же пары
+    const pair = data.parts[0].pairs.find(p => p.q.fi === t.fi);
+    expect((await task(page)).fi).toBe(pair.a.fi);
+  });
+
+  test('одно предложение — не больше 3 раз подряд', async ({ page }) => {
+    const t = await task(page);
+    for (let i = 0; i < 3; i++) {
+      expect((await task(page)).fi).toBe(t.fi);
+      await solve(page, false);
+      await tapEmpty(page);
+    }
+    expect((await task(page)).fi).not.toBe(t.fi);
+    await expect(page.locator('.cell.err')).toHaveCount(3);
+  });
+
+  test('после 100 клеток новый круг перезаписывает клетки по порядку', async ({ page }) => {
     await page.evaluate(() => {
       ps.shown45 = true; // поздравление с 4.5 уже было
-      for (let i = 1; i < 100; i++) ps.cells[i] = 'ok';
+      ps.cells = Array(100).fill('ok');
+      ps.cells[0] = 'err';
       ps.pos = 99;
       resetSentence();
       renderSentences();
     });
     await solve(page, true);
     await tapEmpty(page);
-
     expect(await page.evaluate(() => [ps.round, ps.pos])).toEqual([2, 0]);
-    expect(await page.evaluate(() => ps.slots[0])).toBe(keptPair);
-    expect(await page.evaluate(() => ps.slots[1])).not.toBe(otherPair);
     await expect(page.locator('.cell').first()).toHaveClass(/err/);
-    expect((await task(page)).fi).toBe(first.fi);
-
+    await expect(page.locator('.cell').first()).toHaveClass(/current/);
     await solve(page, true);
-    await expect(page.locator('.cell').first()).toHaveClass(/ok/);
     await expect(page.locator('.cell.err')).toHaveCount(0);
+    await expect(page.locator('#stat-rating')).toHaveText('5.0');
   });
 
   test('рейтинг: 0.1 звезды за каждые 2 голубые клетки, 5.0 — все 100', async ({ page }) => {
@@ -274,6 +294,7 @@ test.describe('составление предложений', () => {
 
     await expect(page.locator('#congrats h2')).toHaveText('Поздравляем, вам доступен следующий урок!');
     await expect(page.locator('#congrats')).toContainText('Перейти к следующему или довести этот урок до совершенства?');
+    await expect(page.locator('#keep-going')).toHaveText('Продолжить');
     await page.click('#keep-going');
     await expect(page.locator('.sentence-ru')).toBeVisible();
     expect(await page.evaluate(() => ps.pos)).toBe(90);
@@ -327,7 +348,7 @@ test.describe('составление предложений', () => {
     await solve(page, true);
     await tapEmpty(page);
     await solve(page, false);
-    await page.reload();
+    await page.reload(); // перезагрузка сразу после ошибки
     await expect(page.locator('#lesson-1 .circle')).toHaveText('0.0'); // среднее 1.1 и 1.2
     await page.click('#lesson-1');
     await expect(page.locator('#open-part-1-1 .circle')).toHaveText('0.1');
@@ -337,7 +358,8 @@ test.describe('составление предложений', () => {
     await expect(page.locator('#stat-wrong')).toHaveText('1');
     await expect(page.locator('.cell.ok')).toHaveCount(2);
     await expect(page.locator('.cell.err')).toHaveCount(1);
-    expect(await page.evaluate(() => ps.pos)).toBe(2);
+    expect(await page.evaluate(() => ps.pos)).toBe(3);
+    await expect(page.locator('.cell').nth(3)).toHaveClass(/current/);
   });
 
   test('«Ой, ошибся» убирает последнее слово; нажатие на слово — его и следующие', async ({ page }) => {

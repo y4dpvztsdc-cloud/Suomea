@@ -1,11 +1,17 @@
 // Составление финских предложений по русскому переводу (подуроки 1.1, 1.2 …).
 //
-// Внизу экрана 100 клеток — 100 предложений круга (50 пар вопрос/ответ).
-// Верный ответ красит клетку в голубой, неверный — в красный. Когда круг пройден,
-// начинается следующий: пары с красными клетками возвращаются, остальные меняются
-// на новые. Рейтинг = 0.1 звезды за каждые 2 голубые клетки, 5.0 — все 100 голубые.
+// Пары вопрос/ответ идут в случайном порядке, но внутри пары всегда сначала «а»
+// (вопрос), затем «б» (ответ). После ошибки то же предложение даётся ещё раз,
+// всего не больше 3 раз подряд.
+//
+// Внизу экрана 100 клеток — журнал ответов: каждый ответ (и повтор) занимает
+// следующую клетку, верный — голубую, ошибка — красную (метка, когда она была).
+// Пройдя 100 клеток, круг начинается заново и перезаписывает клетки по порядку,
+// так что красную клетку можно «перекрасить» на следующем круге.
+// Рейтинг = 0.1 звезды за каждые 2 голубые клетки, 5.0 — все 100 голубые.
 
 const CELLS = 100;
+const MAX_ATTEMPTS = 3; // сколько раз подряд даётся одно предложение после ошибок
 const SENTENCE_OPTIONS = 6;
 const FI_WORD = /([A-Za-zÅÄÖåäö]+)([^A-Za-zÅÄÖåäö]*)/g;
 
@@ -38,6 +44,7 @@ let sChecked = false;
 let sLastCorrect = false;
 let sPraise = null;
 let sCongrats = null;    // '4.5' | '5.0' — поздравление после этого ответа
+let sCheckedTask = null; // проверенное предложение (пока на экране результат)
 
 function setSentenceData(data) {
   sentenceData = data;
@@ -56,11 +63,13 @@ function partPairs(p = part) {
 function newPartState() {
   return {
     cells: Array(CELLS).fill('todo'), // 'todo' | 'ok' | 'err'
-    slots: [],       // номер пары для каждой пары клеток (2k — вопрос, 2k+1 — ответ)
-    pool: [],        // перемешанные номера пар, из них берутся новые
-    cursor: 0,
-    pos: 0,          // текущая клетка
+    pos: 0,          // клетка, которую заполнит следующий ответ
     round: 1,
+    pool: [],        // перемешанные номера пар
+    cursor: 0,
+    pair: null,      // текущая пара
+    stage: 0,        // 0 — вопрос («а»), 1 — ответ («б»)
+    attempts: 1,     // какая по счёту попытка текущего предложения
     correct: 0,
     wrong: 0,
     shown45: false,  // поздравления показываются один раз
@@ -68,20 +77,13 @@ function newPartState() {
   };
 }
 
+// Следующая пара в случайном порядке; когда все пройдены — новое перемешивание
 function nextPair() {
   if (ps.cursor >= ps.pool.length) {
     ps.pool = shuffle(partPairs().map((_, i) => i));
     ps.cursor = 0;
   }
   return ps.pool[ps.cursor++];
-}
-
-// Пары с ошибкой остаются на следующий круг, остальные заменяются новыми
-function fillSlots() {
-  for (let k = 0; k < CELLS / 2; k++) {
-    const failed = ps.cells[2 * k] === 'err' || ps.cells[2 * k + 1] === 'err';
-    if (ps.slots[k] === undefined || !failed) ps.slots[k] = nextPair();
-  }
 }
 
 function partRating(state) {
@@ -92,7 +94,7 @@ function partRating(state) {
 function openPart(p) {
   part = p;
   ps = loadPartState(p.id) || newPartState();
-  if (!ps.slots.length) fillSlots();
+  if (ps.pair === null) ps.pair = nextPair();
   savePartState(p.id, ps);
   resetSentence();
 }
@@ -109,9 +111,9 @@ function capitalize(word) {
 }
 
 function currentTask() {
-  const pair = partPairs()[ps.slots[Math.floor(ps.pos / 2)]];
-  const s = ps.pos % 2 === 0 ? pair.q : pair.a;
-  return { ru: s.ru, fi: s.fi, tokens: tokenize(s.fi), cell: ps.pos };
+  const pair = partPairs()[ps.pair];
+  const s = ps.stage === 0 ? pair.q : pair.a;
+  return { ru: s.ru, fi: s.fi, tokens: tokenize(s.fi) };
 }
 
 // Правильное слово + 5 неверных из той же группы словоформ (при нехватке — из группы pad)
@@ -172,7 +174,7 @@ function sentenceTopbar() {
 
 function renderCells() {
   const cells = ps.cells.map((state, i) =>
-    `<span class="cell ${state}${i === ps.pos ? ' current' : ''}"></span>`
+    `<span class="cell ${state}${!sChecked && i === ps.pos ? ' current' : ''}"></span>`
   ).join('');
   return `<div class="cells" id="cells">${cells}</div>`;
 }
@@ -184,7 +186,7 @@ function renderSentences() {
     <button class="barbtn" id="help">${bookIcon()}Помощь</button>
   `);
 
-  const task = currentTask();
+  const task = sChecked ? sCheckedTask : currentTask();
   const complete = sBuilt.length === task.tokens.length;
   const state = sChecked ? (sLastCorrect ? ' correct' : ' wrong') : '';
 
@@ -271,11 +273,13 @@ function undoFrom(position) {
   renderSentences();
 }
 
-// Проверяется только всё предложение целиком
+// Проверяется только всё предложение целиком. Результат сразу записывается в клетку,
+// и сразу выбирается следующее предложение — прогресс не теряется при перезагрузке.
 function checkSentence() {
   const task = currentTask();
   sLastCorrect = task.tokens.every((t, i) => t.w.toLowerCase() === sBuilt[i].toLowerCase());
   sChecked = true;
+  sCheckedTask = task;
   ps.cells[ps.pos] = sLastCorrect ? 'ok' : 'err';
   if (sLastCorrect) {
     ps.correct++;
@@ -293,20 +297,40 @@ function checkSentence() {
     sCongrats = '4.5';
     ps.shown45 = true;
   }
+  advanceCell();
+  advanceTask();
   savePartState(part.id, ps);
   speakFinnish(task.fi);
   renderSentences();
 }
 
-function nextSentence() {
-  const congrats = sCongrats;
+// Ответ занимает следующую клетку; после 100-й круг начинается заново
+function advanceCell() {
   ps.pos++;
   if (ps.pos >= CELLS) {
     ps.pos = 0;
     ps.round++;
-    fillSlots();
   }
-  savePartState(part.id, ps);
+}
+
+// После ошибки — то же предложение (не больше 3 раз подряд), иначе дальше:
+// от вопроса к ответу той же пары, от ответа — к новой случайной паре
+function advanceTask() {
+  if (!sLastCorrect && ps.attempts < MAX_ATTEMPTS) {
+    ps.attempts++;
+    return;
+  }
+  ps.attempts = 1;
+  if (ps.stage === 0) {
+    ps.stage = 1;
+  } else {
+    ps.stage = 0;
+    ps.pair = nextPair();
+  }
+}
+
+function nextSentence() {
+  const congrats = sCongrats;
   resetSentence();
   if (congrats) renderCongrats(congrats);
   else renderSentences();
@@ -338,7 +362,7 @@ function renderCongrats(level) {
           ? `Урок ${nextName} открыт. Перейти к следующему или довести этот урок до совершенства?`
           : 'Следующий урок скоро появится. Можно довести этот урок до совершенства — 5.0.'}</p>
         ${next ? `<button class="restart-btn" id="go-next">Перейти к уроку ${next.part.id}</button>` : ''}
-        <button class="restart-btn ${next ? 'secondary' : ''}" id="keep-going">Довести до 5.0</button>
+        <button class="restart-btn ${next ? 'secondary' : ''}" id="keep-going">Продолжить</button>
       </div>
     `;
   }
