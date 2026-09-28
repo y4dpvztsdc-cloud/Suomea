@@ -2,18 +2,19 @@
 // Часть 1 — вопросы и утвердительные ответы, часть 2 — вопросы и отрицательные ответы.
 
 const PAIRS_PER_PART = 10; // сколько пар вопрос/ответ берётся в одну часть урока
+const SENTENCE_OPTIONS = 6;
 const FI_WORD = /([A-Za-zÅÄÖåäö]+)([^A-Za-zÅÄÖåäö]*)/g;
 
 let sentenceData = null; // { groups, parts } из data/sentences.json
 let formGroup = {};      // словоформа в нижнем регистре -> имя группы
 let sPart = 0;
-let sQueue = [];         // задания: { ru, fi, tokens: [{ w, p }] }
+let sQueue = [];         // задания: { ru, fi, tokens: [{ w, p }], cell }
+let sCells = [];         // клетки прогресса части: 'todo' | 'ok' | 'err'
 let sIdx = 0;
 let sBuilt = [];         // выбранные пользователем слова
 let sOptions = [];       // варианты для следующего слова
 let sChecked = false;
 let sLastCorrect = false;
-let sCorrect = 0;        // верно составленные предложения в текущей части
 let sMistakes = 0;       // ошибки в текущей части
 let sLessonCorrect = 0;
 let sLessonMistakes = 0;
@@ -35,39 +36,36 @@ function capitalize(word) {
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
-function makeTask(s) {
-  return { ru: s.ru, fi: s.fi, tokens: tokenize(s.fi) };
+function makeTask(s, cell) {
+  return { ru: s.ru, fi: s.fi, tokens: tokenize(s.fi), cell };
 }
 
 function buildSentenceQueue(partIndex) {
   const pairs = shuffle(sentenceData.parts[partIndex].pairs).slice(0, PAIRS_PER_PART);
   const tasks = [];
   pairs.forEach(pair => {
-    tasks.push(makeTask(pair.q));
-    tasks.push(makeTask(pair.a));
+    tasks.push(makeTask(pair.q, tasks.length));
+    tasks.push(makeTask(pair.a, tasks.length));
   });
   return tasks;
 }
 
-function partTotal() {
-  return Math.min(PAIRS_PER_PART, sentenceData.parts[sPart].pairs.length) * 2;
-}
-
-// Правильное слово + 3 неверных из той же группы словоформ
+// Правильное слово + 5 неверных из той же группы словоформ (при нехватке — из группы pad)
 function pickWordOptions(token, position) {
+  const need = SENTENCE_OPTIONS - 1;
   const lower = token.w.toLowerCase();
   const group = sentenceData.groups[formGroup[lower]];
   const differs = f => f.toLowerCase() !== lower;
 
-  let distractors = shuffle(group.forms.filter(differs)).slice(0, 3);
-  if (distractors.length < 3 && group.pad) {
+  let distractors = shuffle(group.forms.filter(differs)).slice(0, need);
+  if (distractors.length < need && group.pad) {
     const pad = sentenceData.groups[group.pad].forms.filter(f => differs(f) && !distractors.includes(f));
-    distractors = distractors.concat(shuffle(pad).slice(0, 3 - distractors.length));
+    distractors = distractors.concat(shuffle(pad).slice(0, need - distractors.length));
   }
-  if (distractors.length < 3) {
+  if (distractors.length < need) {
     const all = Object.values(sentenceData.groups).flatMap(g => g.forms);
     const rest = all.filter(f => differs(f) && !distractors.includes(f));
-    distractors = distractors.concat(shuffle(rest).slice(0, 3 - distractors.length));
+    distractors = distractors.concat(shuffle(rest).slice(0, need - distractors.length));
   }
   const show = w => (position === 0 ? capitalize(w) : w);
   return shuffle([token.w, ...distractors].map(show));
@@ -87,11 +85,11 @@ function prepareOptions() {
 function startPart(partIndex) {
   sPart = partIndex;
   sQueue = buildSentenceQueue(partIndex);
+  sCells = sQueue.map(() => 'todo');
   sIdx = 0;
-  sCorrect = 0;
   sMistakes = 0;
   resetSentence();
-  renderSentences();
+  if (currentView === 'sentences') renderSentences();
 }
 
 function startSentences() {
@@ -107,15 +105,24 @@ function resetSentence() {
   if (sIdx < sQueue.length) prepareOptions();
 }
 
-function renderBuilt(task) {
-  const state = sChecked ? (sLastCorrect ? ' correct' : ' wrong') : '';
-  const chips = task.tokens.map((t, i) => {
-    if (i < sBuilt.length) {
-      return `<span class="chip" data-pos="${i}">${sBuilt[i]}${t.p}</span>`;
-    }
-    return `<span class="chip placeholder"></span>`;
+function sentenceTopbar() {
+  renderTopbar({
+    back: showLesson,
+    backLabel: lesson.title,
+    right: `
+      <span class="stat" title="Рейтинг">${starIcon()}<b id="stat-rating">${rating(stats).toFixed(1)}</b></span>
+      <span class="stat" title="Верно">${checkIcon()}<b id="stat-correct">${stats.correct}</b></span>
+      <span class="stat" title="Ошибки">${crossIcon()}<b id="stat-wrong">${stats.wrong}</b></span>
+    `,
+  });
+}
+
+function renderCells() {
+  const cells = sCells.map((state, i) => {
+    const current = !sChecked && sIdx < sQueue.length && currentTask().cell === i;
+    return `<span class="cell ${state}${current ? ' current' : ''}"></span>`;
   }).join('');
-  return `<div class="built${state}" id="built">${chips}</div>`;
+  return `<div class="cells" id="cells">${cells}</div>`;
 }
 
 function renderSentenceDone() {
@@ -147,49 +154,44 @@ function renderSentenceDone() {
 }
 
 function renderSentences() {
-  document.getElementById('header-title').textContent = 'Предложения';
+  sentenceTopbar();
   if (sIdx >= sQueue.length) {
+    renderBottombar('');
     renderSentenceDone();
     return;
   }
+  renderBottombar(`
+    <button class="barbtn" id="oops">${undoIcon()}Ой, ошибся</button>
+    <button class="barbtn" id="help">${bookIcon()}Помощь</button>
+  `);
 
   const task = currentTask();
   const complete = sBuilt.length === task.tokens.length;
-  const pct = Math.round((sCorrect / partTotal()) * 100);
   const part = sentenceData.parts[sPart];
+  const state = sChecked ? (sLastCorrect ? ' correct' : ' wrong') : '';
 
-  let bottom;
-  if (sChecked) {
-    bottom = `
-      <div class="sentence-result ${sLastCorrect ? 'correct-text' : 'wrong-text'}">
-        ${sLastCorrect ? 'Верно!' : 'Неверно. Правильный вариант:'}
-      </div>
-      <div class="sentence-answer">
-        <button class="speaker-btn-inline" id="speak-sentence" aria-label="Произнести">${speakerSvg()}</button>
-        <span>${task.fi}</span>
-      </div>
-      <button class="check-btn" id="next-sentence">Далее</button>
-    `;
-  } else if (complete) {
-    bottom = `<button class="check-btn" id="check-sentence">Проверить</button>`;
-  } else {
-    bottom = `
-      <div class="options">
-        ${sOptions.map(o => `<div class="option word-option">${o}</div>`).join('')}
-      </div>
-    `;
-  }
+  const built = sBuilt.map((w, i) => `<span class="chip" data-pos="${i}">${w}${task.tokens[i].p}</span>`).join('');
+  const answer = sChecked && !sLastCorrect
+    ? `<div class="right-answer">${task.fi}</div>`
+    : '';
+
+  let hint = '';
+  if (sChecked) hint = 'Нажмите на экран, чтобы продолжить';
+  else if (complete) hint = 'Нажмите на экран, чтобы проверить';
 
   document.getElementById('app-body').innerHTML = `
-    <div class="content">
-      <div class="direction-label">Часть ${sPart + 1} из ${sentenceData.parts.length} · ${part.title}</div>
+    <div class="sentence-screen" id="sentence-screen">
+      <div class="part-label">Часть ${sPart + 1} из ${sentenceData.parts.length} · ${part.title}</div>
       <div class="sentence-ru">${task.ru}</div>
-      ${renderBuilt(task)}
-      <div class="sentence-bottom">${bottom}</div>
-    </div>
-    <div class="progress-row">
-      <div class="progress-pct">${pct}%</div>
-      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+      <div class="answer-field${state}" id="built">
+        <div class="built-words">${built}</div>
+        ${answer}
+      </div>
+      <div class="options six">
+        ${sOptions.map(o => `<div class="option word-option">${o}</div>`).join('')}
+      </div>
+      <div class="tap-hint">${hint}</div>
+      ${renderCells()}
     </div>
   `;
 
@@ -202,12 +204,16 @@ function renderSentences() {
       el.addEventListener('click', () => undoFrom(parseInt(el.dataset.pos, 10)));
     });
   }
-  const check = document.getElementById('check-sentence');
-  if (check) check.addEventListener('click', checkSentence);
-  const next = document.getElementById('next-sentence');
-  if (next) next.addEventListener('click', nextSentence);
-  const speak = document.getElementById('speak-sentence');
-  if (speak) speak.addEventListener('click', () => speakFinnish(task.fi));
+  // Проверка и переход дальше — нажатием на пустое место экрана
+  document.getElementById('sentence-screen').addEventListener('click', e => {
+    if (e.target.closest('.word-option, .chip')) return;
+    if (sChecked) nextSentence();
+    else if (complete) checkSentence();
+  });
+  document.getElementById('oops').addEventListener('click', () => {
+    if (!sChecked && sBuilt.length) undoFrom(sBuilt.length - 1);
+  });
+  document.getElementById('help').addEventListener('click', () => showDescription(showSentences));
 }
 
 function chooseWord(word) {
@@ -227,12 +233,14 @@ function checkSentence() {
   const task = currentTask();
   sLastCorrect = task.tokens.every((t, i) => t.w.toLowerCase() === sBuilt[i].toLowerCase());
   sChecked = true;
+  recordSentence(sLastCorrect);
   if (sLastCorrect) {
-    sCorrect++;
     sLessonCorrect++;
+    sCells[task.cell] = 'ok';
   } else {
     sMistakes++;
     sLessonMistakes++;
+    sCells[task.cell] = 'err';
     // Неверно составленное предложение вернётся через несколько заданий
     sQueue.splice(Math.min(sIdx + 1 + RETRY_GAP, sQueue.length), 0, task);
   }
@@ -244,8 +252,4 @@ function nextSentence() {
   sIdx++;
   resetSentence();
   renderSentences();
-}
-
-function speakerSvg() {
-  return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>`;
 }

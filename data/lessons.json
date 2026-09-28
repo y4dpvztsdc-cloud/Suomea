@@ -1,0 +1,10 @@
+[
+  {
+    "id": 1,
+    "title": "Урок 1",
+    "subtitle": "Глагол olla",
+    "words": "data/lessons/1-words.json",
+    "sentences": "data/lessons/1-sentences.json",
+    "description": "data/lessons/1-description.html"
+  }
+]

@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const words = require('../data/words.json');
+const words = require('../data/lessons/1-words.json');
 
 test('в словаре у каждого слова есть fi, ru и group', () => {
   expect(words.length).toBeGreaterThan(0);

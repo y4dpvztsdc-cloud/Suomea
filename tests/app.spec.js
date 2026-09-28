@@ -1,16 +1,18 @@
 const { test, expect } = require('@playwright/test');
-const words = require('../data/words.json');
+const words = require('../data/lessons/1-words.json');
 
-// Текущее задание из глобального состояния app.js
+// Текущее задание из глобального состояния words.js
 const currentRep = page => page.evaluate(() => queue[idx]);
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('.option')).toHaveCount(4);
+  await page.click('#lesson-1');
+  await page.click('#open-words');
+  await expect(page.locator('.option')).toHaveCount(6);
 });
 
-test('стартовый экран: слово, 4 варианта, прогресс 0%', async ({ page }) => {
-  await expect(page.locator('#header-title')).toHaveText('Новые слова');
+test('стартовый экран: слово, 6 вариантов, прогресс 0%', async ({ page }) => {
+  await expect(page.locator('.topbar-caption')).toHaveText('Новые слова');
   await expect(page.locator('.word-fi')).not.toBeEmpty();
   await expect(page.locator('.slot')).toHaveCount(3);
   await expect(page.locator('.progress-pct')).toHaveText('0%');
@@ -20,7 +22,7 @@ test('варианты разные и среди них есть правиль
   const rep = await currentRep(page);
   const word = words[rep.word];
   const labels = await page.locator('.option').allTextContents();
-  expect(new Set(labels).size).toBe(4);
+  expect(new Set(labels).size).toBe(6);
   expect(labels).toContain(rep.dir === 'ru-fi' ? word.fi : word.ru);
   await expect(page.locator('.word-fi')).toHaveText(rep.dir === 'ru-fi' ? word.ru : word.fi);
 });
@@ -116,15 +118,16 @@ test('каждое слово встречается 3 раза: 2× ru→fi и 
   });
 });
 
-test('список слов показывает весь словарь', async ({ page }) => {
-  await page.click('#nav-list');
-  await expect(page.locator('#header-title')).toHaveText('Список слов');
-  await expect(page.locator('#nav-list')).toHaveClass(/active/);
-  await expect(page.locator('.wordlist-row')).toHaveCount(words.length);
-  await expect(page.locator('.wordlist-row').first()).toContainText(words[0].fi);
+test('прогресс слов сохраняется и виден в кружке урока', async ({ page }) => {
+  const rep = await currentRep(page);
+  await page.locator(`.option[data-i="${rep.word}"]`).click();
+  const pct = await page.evaluate(() => progressPct());
+  await page.click('#back');
+  await expect(page.locator('#open-words .circle')).toHaveText(`${pct}%`);
 
-  await page.click('#nav-train');
-  await expect(page.locator('.option')).toHaveCount(4);
+  await page.reload();
+  await page.click('#lesson-1');
+  await expect(page.locator('#open-words .circle')).toHaveText(`${pct}%`);
 });
 
 test('экран окончания урока и повтор', async ({ page }) => {
@@ -132,17 +135,23 @@ test('экран окончания урока и повтор', async ({ page }
   const rep = await currentRep(page);
   await page.locator(`.option[data-i="${rep.word}"]`).click();
 
-  await expect(page.locator('.done-screen h2')).toHaveText('Урок пройден');
+  await expect(page.locator('.done-screen h2')).toHaveText('Слова выучены');
   await expect(page.locator('.done-screen p')).toContainText('ошибок: 0');
 
-  await page.click('text=Повторить слова');
-  await expect(page.locator('.option')).toHaveCount(4);
+  await page.click('#restart-words');
+  await expect(page.locator('.option')).toHaveCount(6);
   await expect(page.locator('.progress-pct')).toHaveText('0%');
-  await expect(page.locator('#header-title')).toHaveText('Новые слова');
+});
+
+test('после слов можно сразу перейти к предложениям', async ({ page }) => {
+  await page.evaluate(() => { idx = queue.length; renderTrain(); });
+  await page.click('#to-sentences');
+  await expect(page.locator('.sentence-ru')).toBeVisible();
 });
 
 test('сообщение об ошибке, если словарь не загрузился', async ({ page }) => {
-  await page.route('**/data/words.json', route => route.abort());
+  await page.route('**/data/lessons/1-words.json', route => route.abort());
   await page.goto('/');
+  await page.click('#lesson-1');
   await expect(page.locator('.done-screen h2')).toHaveText('Не удалось загрузить слова');
 });

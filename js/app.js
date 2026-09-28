@@ -1,315 +1,134 @@
-let words = [];
-let queue = [];
-let idx = 0;
-let answered = false;
-let correctTotal = 0; // выполненные задания: засчитываются только верные ответы
-let mistakes = 0;
-// wordProgress[i] = true/false по каждому заданию слова в порядке появления (максимум 3).
-// false (красный крестик) меняется на true (синяя галочка), когда задание пройдено при повторе.
-let wordProgress = [];
-let currentView = 'train'; // 'train' | 'sentences' | 'list'
+// Экраны приложения, навигация, данные уроков и сохранение прогресса
 
-const REPS_PER_WORD = 3;
-const RETRY_GAP = 3; // через сколько заданий вернётся задание после ошибки
+const RATING_WINDOW = 40; // рейтинг 0–5 считается по последним 40 проверенным предложениям
+const GOOD_RATING = 4.5;  // от этого значения кружок рейтинга синий, ниже — оранжевый
 
-function totalReps() {
-  return words.length * REPS_PER_WORD;
+let lessons = [];     // список уроков из data/lessons.json
+let lesson = null;    // открытый урок
+let loadedLessonId = null;
+let words = [];       // слова открытого урока
+let stats = null;     // сохранённая статистика открытого урока
+let currentView = 'home';
+let homeTab = 'lessons';
+
+// ---------- прогресс в localStorage ----------
+
+function storageKey(id) {
+  return `suomea.lesson.${id}`;
 }
 
-function progressPct() {
-  return Math.round((correctTotal / totalReps()) * 100);
-}
-
-function shuffle(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-function buildQueue() {
-  let reps = [];
-  words.forEach((w, i) => {
-    reps.push({ word: i, dir: 'ru-fi' });
-    reps.push({ word: i, dir: 'ru-fi' });
-    reps.push({ word: i, dir: 'fi-ru' });
-  });
-  reps = shuffle(reps);
-  // avoid the same word appearing twice in a row
-  for (let i = 1; i < reps.length; i++) {
-    if (reps[i].word === reps[i - 1].word) {
-      for (let j = i + 1; j < reps.length; j++) {
-        if (reps[j].word !== reps[i - 1].word && reps[j].word !== reps[i].word) {
-          [reps[i], reps[j]] = [reps[j], reps[i]];
-          break;
-        }
-      }
-    }
-  }
-  return reps;
-}
-
-function pickOptionPool(direction, correctIndex) {
-  const correctGroup = words[correctIndex].group;
-  const sameGroup = words
-    .map((_, i) => i)
-    .filter(i => i !== correctIndex && words[i].group === correctGroup);
-  let distractors = shuffle(sameGroup).slice(0, 3);
-  if (distractors.length < 3) {
-    const rest = words
-      .map((_, i) => i)
-      .filter(i => i !== correctIndex && !distractors.includes(i));
-    const filler = shuffle(rest).slice(0, 3 - distractors.length);
-    distractors = distractors.concat(filler);
-  }
-  const all = shuffle([correctIndex, ...distractors]);
-  return all.map(i => ({
-    index: i,
-    label: direction === 'ru-fi' ? words[i].fi : words[i].ru
-  }));
-}
-
-// Выбранный финский голос; null — пока не найден
-let finnishVoice = null;
-const VOICE_WAIT_MS = 3000;
-
-function isFinnish(voice) {
-  return /^fi([-_]|$)/i.test(voice.lang);
-}
-
-// Satu (улучшенный/премиум) > Satu > любой финский голос
-function voiceScore(voice) {
-  const id = `${voice.name} ${voice.voiceURI}`;
-  let score = 0;
-  if (/satu/i.test(id)) score += 10;
-  if (/premium/i.test(id)) score += 3;
-  else if (/enhanced|улучш|расшир/i.test(id)) score += 2;
-  if (/compact/i.test(id)) score -= 1;
-  return score;
-}
-
-function pickFinnishVoice(voices) {
-  const finnish = voices.filter(isFinnish);
-  if (finnish.length === 0) return null;
-  return finnish.reduce((best, v) => (voiceScore(v) > voiceScore(best) ? v : best));
-}
-
-function setVoiceWarning(visible) {
-  document.getElementById('voice-warning').hidden = !visible;
-}
-
-// Список голосов в браузере приходит с задержкой, поэтому ждём voiceschanged.
-// Если за VOICE_WAIT_MS финский голос так и не появился — показываем предупреждение.
-function initVoice() {
-  if (!window.speechSynthesis) {
-    setVoiceWarning(true);
-    return;
-  }
-  const update = () => {
-    finnishVoice = pickFinnishVoice(window.speechSynthesis.getVoices());
-    if (finnishVoice) setVoiceWarning(false);
-    return finnishVoice;
-  };
-  window.speechSynthesis.addEventListener('voiceschanged', update);
-  if (!update()) {
-    setTimeout(() => { if (!update()) setVoiceWarning(true); }, VOICE_WAIT_MS);
+function loadStats(id) {
+  const empty = { history: [], correct: 0, wrong: 0, wordsPct: 0 };
+  try {
+    return Object.assign(empty, JSON.parse(localStorage.getItem(storageKey(id))) || {});
+  } catch (e) {
+    return empty;
   }
 }
 
-function speakFinnish(text, rate) {
-  if (!window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = finnishVoice ? finnishVoice.lang : 'fi-FI';
-  if (finnishVoice) u.voice = finnishVoice;
-  u.rate = rate || 0.9;
-  window.speechSynthesis.speak(u);
-}
-
-function renderSlots(wordIndex) {
-  const progress = wordProgress[wordIndex];
-  let slots = '';
-  for (let i = 0; i < REPS_PER_WORD; i++) {
-    if (i < progress.length) {
-      slots += `<div class="slot ${progress[i] ? 'correct' : 'wrong'}">${progress[i] ? '&#10003;' : '&#10005;'}</div>`;
-    } else {
-      slots += `<div class="slot"></div>`;
-    }
+function saveStats() {
+  try {
+    localStorage.setItem(storageKey(lesson.id), JSON.stringify(stats));
+  } catch (e) {
+    // без хранилища прогресс живёт до перезагрузки страницы
   }
-  return slots;
 }
 
-function renderTracker(wordIndex) {
-  return `
-    <div class="word-tracker">
-      <div class="tracker-slots">${renderSlots(wordIndex)}</div>
-    </div>
-  `;
+function rating(s) {
+  return (5 * s.history.filter(Boolean).length) / RATING_WINDOW;
 }
 
-// Возвращает задание в очередь через несколько шагов, не ставя его рядом с тем же словом
-function requeue(rep) {
-  for (let p = Math.min(idx + RETRY_GAP, queue.length); p <= queue.length; p++) {
-    const before = queue[p - 1];
-    const after = queue[p];
-    if ((!before || before.word !== rep.word) && (!after || after.word !== rep.word)) {
-      queue.splice(p, 0, rep);
-      return;
-    }
-  }
-  queue.push(rep);
+function recordSentence(ok) {
+  stats.history.push(ok);
+  if (stats.history.length > RATING_WINDOW) stats.history.shift();
+  if (ok) stats.correct++;
+  else stats.wrong++;
+  saveStats();
 }
 
-function renderProgress() {
-  const pct = progressPct();
-  document.querySelector('.progress-pct').textContent = `${pct}%`;
-  document.querySelector('.progress-fill').style.width = `${pct}%`;
+function recordWordsPct(pct) {
+  stats.wordsPct = Math.max(stats.wordsPct, pct);
+  saveStats();
 }
 
-function renderTrain() {
-  if (idx >= queue.length) {
-    document.getElementById('header-title').textContent = 'Новые слова';
-    const pct = Math.round((correctTotal / (correctTotal + mistakes)) * 100);
-    document.getElementById('app-body').innerHTML = `
-      <div class="done-screen">
-        <div class="big">&#127942;</div>
-        <h2>Урок пройден</h2>
-        <p>Точность: ${pct}% (ошибок: ${mistakes})</p>
-        <button class="restart-btn" id="to-sentences">Дальше: предложения</button>
-        <button class="restart-btn secondary" onclick="restart()">Повторить слова</button>
+// ---------- общие элементы экрана ----------
+
+function renderTopbar({ title = '', back = null, backLabel = '', right = '', home = false }) {
+  const bar = document.getElementById('topbar');
+  if (home) {
+    bar.className = 'topbar home';
+    bar.innerHTML = `
+      <h1>Suomea</h1>
+      <div class="segmented">
+        <button id="tab-lessons" class="${homeTab === 'lessons' ? 'active' : ''}">Уроки</button>
+        <button id="tab-dictionary" class="${homeTab === 'dictionary' ? 'active' : ''}">Словарь</button>
       </div>
     `;
-    document.getElementById('to-sentences').addEventListener('click', () => showView('sentences'));
+    document.getElementById('tab-lessons').addEventListener('click', () => showHome('lessons'));
+    document.getElementById('tab-dictionary').addEventListener('click', () => showHome('dictionary'));
     return;
   }
-
-  const rep = queue[idx];
-  const word = words[rep.word];
-  answered = false;
-
-  const promptText = rep.dir === 'ru-fi' ? word.ru : word.fi;
-  const options = pickOptionPool(rep.dir, rep.word);
-  const overallPct = progressPct();
-
-  document.getElementById('header-title').textContent = 'Новые слова';
-  document.getElementById('app-body').innerHTML = `
-    <div class="content">
-      ${renderTracker(rep.word)}
-      <div class="word-stage">
-        <div class="word-fi">${promptText}</div>
-      </div>
-      <div class="options" id="options-grid">
-        ${options.map(o => `<div class="option" data-i="${o.index}">${o.label}</div>`).join('')}
-      </div>
-      <div class="feedback" id="feedback"></div>
-    </div>
-    <div class="progress-row">
-      <div class="progress-pct">${overallPct}%</div>
-      <div class="progress-bar"><div class="progress-fill" style="width:${overallPct}%"></div></div>
-    </div>
+  bar.className = 'topbar';
+  bar.innerHTML = `
+    <button class="back" id="back" aria-label="Назад">${chevronIcon()}<span>${backLabel}</span></button>
+    <h1 id="header-title">${title}</h1>
+    <div class="topbar-right">${right}</div>
   `;
-
-  document.querySelectorAll('.option').forEach(el => {
-    el.addEventListener('click', () => handleAnswer(el, rep));
-  });
+  document.getElementById('back').addEventListener('click', back);
 }
 
-function handleAnswer(el, rep) {
-  if (answered) return;
-  answered = true;
-  const chosen = parseInt(el.dataset.i, 10);
-  const isCorrect = chosen === rep.word;
-  const feedback = document.getElementById('feedback');
-  document.querySelectorAll('.option').forEach(o => o.classList.add('disabled'));
+function renderBottombar(html) {
+  const bar = document.getElementById('bottombar');
+  bar.innerHTML = html;
+  bar.hidden = !html;
+}
 
-  const progress = wordProgress[rep.word];
-  if (rep.slot === undefined) {
-    rep.slot = progress.length;
-    progress.push(isCorrect);
-  } else if (isCorrect) {
-    progress[rep.slot] = true;
+function ratingCircle(value) {
+  const cls = value >= GOOD_RATING ? 'blue' : 'orange';
+  return `<span class="circle ${cls}">${value.toFixed(1)}</span>`;
+}
+
+// ---------- экраны ----------
+
+function showHome(tab = homeTab) {
+  currentView = 'home';
+  homeTab = tab;
+  renderTopbar({ home: true });
+  renderBottombar('');
+  const body = document.getElementById('app-body');
+  if (tab === 'dictionary') {
+    body.innerHTML = `<div class="wordlist" id="dictionary">Загрузка…</div>`;
+    ensureLesson(lessons[0]).then(() => {
+      if (currentView === 'home' && homeTab === 'dictionary') renderDictionary();
+    });
+    return;
   }
-  if (isCorrect) {
-    correctTotal++;
-  } else {
-    mistakes++;
-    requeue(rep);
-  }
-  document.querySelector('.tracker-slots').innerHTML = renderSlots(rep.word);
-  renderProgress();
-
-  const fiWord = words[rep.word].fi;
-
-  if (isCorrect) {
-    el.classList.add('correct');
-    feedback.className = 'feedback correct-text';
-    feedback.innerHTML = `Верно! <span class="fi-echo">${speakerIcon()} ${fiWord}</span>`;
-  } else {
-    el.classList.add('wrong');
-    document.querySelector(`.option[data-i="${rep.word}"]`).classList.add('correct');
-    feedback.className = 'feedback wrong-text';
-    feedback.innerHTML = `Правильный вариант выделен зелёным <span class="fi-echo">${speakerIcon()} ${fiWord}</span>`;
-  }
-
-  speakFinnish(fiWord, words[rep.word].rate);
-
-  const btn = feedback.querySelector('.speaker-btn-inline');
-  if (btn) btn.addEventListener('click', () => speakFinnish(fiWord, words[rep.word].rate));
-
-  setTimeout(() => {
-    idx++;
-    if (currentView === 'train') renderTrain();
-  }, 1400);
-}
-
-function speakerIcon() {
-  return `<button class="speaker-btn-inline"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg></button>`;
-}
-
-function restart() {
-  queue = buildQueue();
-  idx = 0;
-  correctTotal = 0;
-  mistakes = 0;
-  wordProgress = words.map(() => []);
-  renderTrain();
-}
-
-function renderList() {
-  document.getElementById('header-title').textContent = 'Список слов';
-  document.getElementById('app-body').innerHTML = `
-    <div class="wordlist">
-      ${words.map(w => `
-        <div class="wordlist-row">
-          <span class="fi">${w.fi}</span>
-          <span class="ru">${w.ru}</span>
-        </div>
+  body.innerHTML = `
+    <div class="list">
+      ${lessons.map(l => `
+        <button class="list-row" id="lesson-${l.id}" data-id="${l.id}">
+          ${ratingCircle(rating(loadStats(l.id)))}
+          <span class="list-text">
+            <span class="list-title">${l.title}</span>
+            <span class="list-sub">${l.subtitle}</span>
+          </span>
+        </button>
       `).join('')}
     </div>
   `;
-}
-
-document.getElementById('voice-warning-close').addEventListener('click', () => setVoiceWarning(false));
-
-const views = {
-  train: () => renderTrain(),
-  sentences: () => renderSentences(),
-  list: () => renderList(),
-};
-
-function showView(name) {
-  currentView = name;
-  Object.keys(views).forEach(v => {
-    document.getElementById(`nav-${v}`).classList.toggle('active', v === name);
+  body.querySelectorAll('.list-row').forEach(row => {
+    row.addEventListener('click', () => openLesson(Number(row.dataset.id)));
   });
-  views[name]();
 }
 
-Object.keys(views).forEach(v => {
-  document.getElementById(`nav-${v}`).addEventListener('click', () => showView(v));
-});
+function renderDictionary() {
+  document.getElementById('dictionary').innerHTML = words.map(w => `
+    <div class="wordlist-row">
+      <span class="fi">${w.fi}</span>
+      <span class="ru">${w.ru}</span>
+    </div>
+  `).join('');
+}
 
 async function loadJson(url) {
   const response = await fetch(url);
@@ -317,28 +136,147 @@ async function loadJson(url) {
   return response.json();
 }
 
-async function init() {
-  initVoice();
-  try {
-    const [wordData, sentences] = await Promise.all([
-      loadJson('data/words.json'),
-      loadJson('data/sentences.json'),
-    ]);
-    words = wordData;
-    setSentenceData(sentences);
-  } catch (error) {
-    console.error(error);
-    document.getElementById('app-body').innerHTML = `
-      <div class="done-screen">
-        <h2>Не удалось загрузить слова</h2>
-        <p>Запустите проект через локальный сервер (см. README).</p>
-      </div>
-    `;
-    return;
-  }
+async function loadText(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(url + ': HTTP ' + response.status);
+  return response.text();
+}
+
+// Загружает слова, предложения и описание урока (один раз) и готовит упражнения
+async function ensureLesson(l) {
+  lesson = l;
+  stats = loadStats(l.id);
+  if (loadedLessonId === l.id) return;
+  const [wordData, sentences, description] = await Promise.all([
+    loadJson(l.words),
+    loadJson(l.sentences),
+    loadText(l.description),
+  ]);
+  words = wordData;
+  l.descriptionHtml = description;
+  setSentenceData(sentences);
+  loadedLessonId = l.id;
   restart();
   startSentences();
-  showView('train');
+}
+
+async function openLesson(id) {
+  try {
+    await ensureLesson(lessons.find(l => l.id === id));
+  } catch (error) {
+    showError(error);
+    return;
+  }
+  showLesson();
+}
+
+function showLesson() {
+  currentView = 'lesson';
+  stats = loadStats(lesson.id);
+  const r = rating(stats);
+  const started = stats.correct + stats.wrong > 0;
+  renderTopbar({ title: lesson.title, back: () => showHome('lessons') });
+  renderBottombar('');
+  document.getElementById('app-body').innerHTML = `
+    <div class="lesson-title">${lesson.subtitle}</div>
+    <div class="list">
+      <button class="list-row" id="open-sentences">
+        ${ratingCircle(r)}
+        <span class="list-text"><span class="list-title">${started ? 'Продолжить урок' : 'Начать урок'}</span></span>
+        ${chevronRight()}
+      </button>
+      <button class="list-row" id="open-words">
+        <span class="circle orange small">${stats.wordsPct}%</span>
+        <span class="list-text"><span class="list-title">Учить новые слова</span></span>
+        ${chevronRight()}
+      </button>
+      <button class="list-row" id="open-description">
+        <span class="circle icon">${readerIcon()}</span>
+        <span class="list-text"><span class="list-title">Описание урока</span></span>
+        ${chevronRight()}
+      </button>
+    </div>
+  `;
+  document.getElementById('open-sentences').addEventListener('click', showSentences);
+  document.getElementById('open-words').addEventListener('click', showWords);
+  document.getElementById('open-description').addEventListener('click', () => showDescription(showLesson));
+}
+
+function showWords() {
+  currentView = 'words';
+  renderTopbar({ back: showLesson, backLabel: lesson.title, right: '<span class="topbar-caption">Новые слова</span>' });
+  renderBottombar('');
+  renderTrain();
+}
+
+function showSentences() {
+  currentView = 'sentences';
+  renderSentences();
+}
+
+function showDescription(back) {
+  currentView = 'description';
+  renderTopbar({ title: 'Описание урока', back });
+  renderBottombar('');
+  document.getElementById('app-body').innerHTML = `<div class="description">${lesson.descriptionHtml}</div>`;
+}
+
+function showError(error) {
+  console.error(error);
+  document.getElementById('app-body').innerHTML = `
+    <div class="done-screen">
+      <h2>Не удалось загрузить слова</h2>
+      <p>Запустите проект через локальный сервер (см. README).</p>
+    </div>
+  `;
+}
+
+// ---------- иконки ----------
+
+function chevronIcon() {
+  return `<svg width="14" height="22" viewBox="0 0 14 22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2 3 11l8 9"/></svg>`;
+}
+
+function chevronRight() {
+  return `<svg class="chevron" width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1.5 1.5 6 6-6 6"/></svg>`;
+}
+
+function starIcon() {
+  return `<svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="rgba(255,255,255,.35)"/><path d="m12 5.5 1.9 4 4.3.5-3.2 3 .9 4.3L12 15.2l-3.9 2.1.9-4.3-3.2-3 4.3-.5z" fill="#fff"/></svg>`;
+}
+
+function checkIcon() {
+  return `<svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="rgba(255,255,255,.35)"/><path d="m7 12.5 3.2 3.2L17 9" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+function crossIcon() {
+  return `<svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="rgba(255,255,255,.35)"/><path d="m8 8 8 8M16 8l-8 8" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+}
+
+function undoIcon() {
+  return `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10.5"/><path d="M10 8 6.5 11.5 10 15"/><path d="M6.5 11.5H14a3.5 3.5 0 0 1 0 7h-1"/></svg>`;
+}
+
+function bookIcon() {
+  return `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><circle cx="12" cy="12" r="10.5"/><path d="M6.5 8.5c2-.8 4-.6 5.5.6v8c-1.5-1.2-3.5-1.4-5.5-.6zM17.5 8.5c-2-.8-4-.6-5.5.6v8c1.5-1.2 3.5-1.4 5.5-.6z"/></svg>`;
+}
+
+function readerIcon() {
+  return `<svg width="46" height="46" viewBox="0 0 48 48"><circle cx="24" cy="11" r="5" fill="currentColor"/><path d="M5 19c7-1 13 1 19 5 6-4 12-6 19-5v17c-7-1-13 1-19 6-6-5-12-7-19-6z" fill="currentColor"/></svg>`;
+}
+
+// ---------- запуск ----------
+
+async function init() {
+  initVoice();
+  document.getElementById('voice-warning-close').addEventListener('click', () => setVoiceWarning(false));
+  try {
+    lessons = await loadJson('data/lessons.json');
+  } catch (error) {
+    showError(error);
+    return;
+  }
+  showHome('lessons');
 }
 
 init();

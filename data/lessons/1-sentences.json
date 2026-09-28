@@ -2,7 +2,7 @@
  "groups": {
   "pron_pers": {"forms": ["minä", "sinä", "hän", "me", "te", "he", "tämä"]},
   "pron_poss": {"forms": ["minun", "sinun", "hänen", "meidän", "teidän", "heidän"]},
-  "question": {"forms": ["mikä", "kuka", "missä", "kenen"]},
+  "question": {"forms": ["mikä", "kuka", "missä", "kenen"], "pad": "olla_q"},
   "yes": {"forms": ["joo"], "pad": "neg"},
   "neg": {"forms": ["en", "et", "ei", "emme", "ette", "eivät"]},
   "olla": {"forms": ["olen", "olet", "on", "olemme", "olette", "ovat", "ole"]},
@@ -12,7 +12,7 @@
   "noun_gen": {"forms": ["ystävän", "koiran", "kissan", "lääkärin", "kokin", "myyjän", "yrittäjän", "hitsaajan", "siivoojan", "opettajan", "opiskelijan"]},
   "place": {"forms": ["kotona", "töissä", "lomalla", "asunnossa", "autossa", "huoneessa", "koulussa", "sairaalassa", "Suomessa", "Helsingissä", "pöydällä", "sohvalla"]},
   "name": {"forms": ["Maria", "Anni", "Markko", "Matias", "Mirri", "Musti"]},
-  "name_gen": {"forms": ["Marian", "Annin", "Markon", "Matiaksen"]}
+  "name_gen": {"forms": ["Marian", "Annin", "Markon", "Matiaksen"], "pad": "noun_gen"}
  },
  "parts": [
   {"id": "affirmative", "title": "Вопросы и утвердительные ответы", "pairs": [

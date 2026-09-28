@@ -71,6 +71,8 @@ test('голоса, пришедшие позже через voiceschanged, по
 test('озвучка идёт выбранным финским голосом', async ({ page }) => {
   await fakeSpeech(page, [v('Samantha', 'en-US'), v('Satu', 'fi-FI')]);
   await page.goto('/');
+  await page.click('#lesson-1');
+  await page.click('#open-words');
   await page.locator('.option').first().click();
   const spoken = await page.evaluate(() => window.__spoken);
   expect(spoken).toHaveLength(1);
@@ -102,5 +104,5 @@ test('браузер без синтеза речи — сразу предуп�
   });
   await page.goto('/');
   await expect(page.locator('#voice-warning')).toBeVisible();
-  await expect(page.locator('.option')).toHaveCount(4);
+  await expect(page.locator('#lesson-1')).toBeVisible();
 });
