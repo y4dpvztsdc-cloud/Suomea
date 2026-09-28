@@ -17,14 +17,22 @@ test('главный экран: список уроков с рейтингом
   await expect(row.locator('.circle')).toHaveClass(/orange/);
 });
 
-test('экран урока: продолжить урок, учить новые слова, описание', async ({ page }) => {
+test('экран урока: 1.1 утверждение, 1.2 отрицание (закрыт), слова, описание', async ({ page }) => {
   await page.click('#lesson-1');
   await expect(page.locator('#header-title')).toHaveText('Урок 1');
   await expect(page.locator('.lesson-title')).toHaveText('Глагол olla');
-  await expect(page.locator('#open-sentences')).toContainText('Начать урок');
+  await expect(page.locator('#open-part-1-1')).toContainText('Урок 1.1');
+  await expect(page.locator('#open-part-1-1')).toContainText('Вопрос + утверждение');
+  await expect(page.locator('#open-part-1-1 .circle')).toHaveText('0.0');
+  await expect(page.locator('#open-part-1-2')).toContainText('Вопрос + отрицание');
+  await expect(page.locator('#open-part-1-2')).toHaveClass(/locked/);
+  await expect(page.locator('#open-part-1-2')).toContainText('откроется при 4.5 в уроке 1.1');
   await expect(page.locator('#open-words')).toContainText('Учить новые слова');
   await expect(page.locator('#open-words .circle')).toHaveText('0%');
   await expect(page.locator('#open-description')).toContainText('Описание урока');
+
+  await page.locator('#open-part-1-2').click();
+  await expect(page.locator('.lesson-title')).toBeVisible(); // закрытый урок не открывается
 
   await page.click('#back');
   await expect(page.locator('#lesson-1')).toBeVisible();
@@ -49,29 +57,42 @@ test('вкладка «Словарь» показывает слова урок
   await expect(page.locator('#lesson-1')).toBeVisible();
 });
 
-const setHistory = (page, ok, total = ok) => page.evaluate(([ok, total]) => {
-  const history = Array(total - ok).fill(false).concat(Array(ok).fill(true));
-  localStorage.setItem('suomea.lesson.1', JSON.stringify({ history, correct: ok, wrong: total - ok, wordsPct: 5 }));
-}, [ok, total]);
+// Сохраняет прогресс подуроков: { '1.1': число голубых клеток, ... }
+const setProgress = (page, parts) => page.evaluate(parts => {
+  const state = ok => ({
+    cells: Array(100).fill('todo').map((_, i) => (i < ok ? 'ok' : 'todo')),
+    slots: [], pool: [], cursor: 0, pos: ok, round: 1, correct: ok, wrong: 0, shown45: true, shown50: false,
+  });
+  const saved = { wordsPct: 5, parts: {} };
+  Object.entries(parts).forEach(([id, ok]) => { saved.parts[id] = state(ok); });
+  localStorage.setItem('suomea.v2.lesson.1', JSON.stringify(saved));
+}, parts);
 
-test('кружок рейтинга: 89 верных из 100 — 4.4 оранжевый, 90 — 4.5 синий', async ({ page }) => {
-  await setHistory(page, 89, 100);
+test('кружки рейтинга: 4.4 оранжевый, 4.5 синий; у урока — среднее по 1.1 и 1.2', async ({ page }) => {
+  await setProgress(page, { '1.1': 88 });
   await page.reload();
-  await expect(page.locator('#lesson-1 .circle')).toHaveText('4.4');
-  await expect(page.locator('#lesson-1 .circle')).toHaveClass(/orange/);
+  await expect(page.locator('#lesson-1 .circle')).toHaveText('2.2');
+  await page.click('#lesson-1');
+  await expect(page.locator('#open-part-1-1 .circle')).toHaveText('4.4');
+  await expect(page.locator('#open-part-1-1 .circle')).toHaveClass(/orange/);
+  await expect(page.locator('#open-part-1-2')).toHaveClass(/locked/);
 
-  await setHistory(page, 90, 100);
+  await setProgress(page, { '1.1': 90, '1.2': 20 });
   await page.reload();
-  await expect(page.locator('#lesson-1 .circle')).toHaveText('4.5');
-  await expect(page.locator('#lesson-1 .circle')).toHaveClass(/blue/);
+  await expect(page.locator('#lesson-1 .circle')).toHaveText('2.7');
+  await page.click('#lesson-1');
+  await expect(page.locator('#open-part-1-1 .circle')).toHaveText('4.5');
+  await expect(page.locator('#open-part-1-1 .circle')).toHaveClass(/blue/);
+  await expect(page.locator('#open-part-1-2 .circle')).toHaveText('1.0');
 });
 
-test('следующий урок открывается при рейтинге 4.5 в предыдущем', async ({ page }) => {
+test('следующий урок открывается, когда в 1.1 и 1.2 набрано 4.5', async ({ page }) => {
   // Подставляем второй урок в список
   await page.route('**/data/lessons.json', route => route.fulfill({
-    json: lessons.concat({ ...lessons[0], id: 2, title: 'Урок 2', subtitle: 'Проверка' }),
+    json: lessons.concat({ ...lessons[0], id: 2, title: 'Урок 2', subtitle: 'Проверка',
+      parts: [{ id: '2.1', title: 'Тест', set: 'affirmative' }] }),
   }));
-  await setHistory(page, 89, 100);
+  await setProgress(page, { '1.1': 90, '1.2': 89 });
   await page.reload();
   const second = page.locator('#lesson-2');
   await expect(second).toHaveClass(/locked/);
@@ -79,10 +100,10 @@ test('следующий урок открывается при рейтинге
   await second.click();
   await expect(page.locator('#lesson-2')).toBeVisible(); // остались на главном экране
 
-  await setHistory(page, 90, 100);
+  await setProgress(page, { '1.1': 90, '1.2': 90 });
   await page.reload();
   await expect(page.locator('#lesson-2')).not.toHaveClass(/locked/);
-  await expect(page.locator('#lesson-2 .circle')).toHaveText('0.0');
   await page.click('#lesson-2');
   await expect(page.locator('#header-title')).toHaveText('Урок 2');
+  await expect(page.locator('#open-part-2-1')).toContainText('Урок 2.1');
 });

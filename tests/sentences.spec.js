@@ -77,6 +77,14 @@ test.describe('составление предложений', () => {
     await tapEmpty(page);
   }
 
+  // Заполняет клетки: ok верных, затем err ошибок, текущей делает клетку pos
+  const setCells = (page, ok, err = 0, pos = ok + err) => page.evaluate(([ok, err, pos]) => {
+    ps.cells = Array(100).fill('todo').map((_, i) => (i < ok ? 'ok' : i < ok + err ? 'err' : 'todo'));
+    ps.pos = pos;
+    resetSentence();
+    renderSentences();
+  }, [ok, err, pos]);
+
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
       window.__spoken = [];
@@ -93,28 +101,38 @@ test.describe('составление предложений', () => {
     });
     await page.goto('/');
     await page.click('#lesson-1');
-    await page.click('#open-sentences');
+    await page.click('#open-part-1-1');
     await expect(page.locator('.word-option')).toHaveCount(6);
   });
 
-  test('экран: русское предложение, пустое поле ответа, 6 вариантов, счётчики', async ({ page }) => {
+  test('экран: русское предложение, пустое поле ответа, 6 вариантов, 100 клеток', async ({ page }) => {
     const t = await task(page);
+    await expect(page.locator('#back')).toContainText('Урок 1.1');
     await expect(page.locator('text=Часть 1 из 2')).toHaveCount(0);
     await expect(page.locator('.sentence-ru')).toHaveText(t.ru);
     await expect(page.locator('.chip')).toHaveCount(0);
     await expect(page.locator('#stat-rating')).toHaveText('0.0');
     await expect(page.locator('#stat-correct')).toHaveText('0');
     await expect(page.locator('#stat-wrong')).toHaveText('0');
-    await expect(page.locator('.cell')).toHaveCount(20);
+    await expect(page.locator('.cell')).toHaveCount(100);
     await expect(page.locator('.cell.current')).toHaveCount(1);
     await expect(page.locator('#oops')).toHaveText('Ой, ошибся');
     await expect(page.locator('#help')).toHaveText('Помощь');
   });
 
-  test('урок начинается с вопроса, за ним идёт ответ', async ({ page }) => {
-    const queue = await page.evaluate(() => sQueue);
-    expect(queue).toHaveLength(20);
-    queue.forEach((t, i) => expect(t.fi.endsWith('?')).toBe(i % 2 === 0));
+  test('круг: 50 пар из утвердительных, вопрос идёт перед ответом', async ({ page }) => {
+    const round = await page.evaluate(() => {
+      const out = [];
+      for (let pos = 0; pos < 100; pos++) { ps.pos = pos; out.push(currentTask().fi); }
+      ps.pos = 0;
+      return out;
+    });
+    const affirmative = data.parts[0].pairs;
+    round.forEach((fi, i) => expect(fi.endsWith('?')).toBe(i % 2 === 0));
+    for (let k = 0; k < 50; k++) {
+      expect(affirmative).toContainEqual(expect.objectContaining({ q: expect.objectContaining({ fi: round[2 * k] }) }));
+    }
+    expect(new Set(round.filter((_, i) => i % 2 === 0)).size).toBe(50);
   });
 
   test('варианты: правильное слово и 5 слов из той же группы', async ({ page }) => {
@@ -149,38 +167,41 @@ test.describe('составление предложений', () => {
     expect(await page.evaluate(() => sChecked)).toBe(true);
     await expect(page.locator('.tap-hint')).toHaveText('Нажмите на экран, чтобы продолжить');
     await page.locator('.answer-field').click();
-    expect(await page.evaluate(() => [sIdx, sChecked])).toEqual([1, false]);
+    expect(await page.evaluate(() => [ps.pos, sChecked])).toEqual([1, false]);
   });
 
-  test('верное предложение: голубое поле, похвала на финском с переводом, звучит ответ', async ({ page }) => {
+  test('верно: голубое поле, финская похвала посередине, перевод внизу, звучит ответ', async ({ page }) => {
     const t = await task(page);
     await solve(page, true);
     await expect(page.locator('.answer-field')).toHaveClass(/correct/);
     await expect(page.locator('.chip.bad')).toHaveCount(0);
     await expect(page.locator('.right-answer')).toHaveCount(0);
     const praise = await page.evaluate(() => sPraise);
-    await expect(page.locator('.praise .verdict-fi')).toHaveText(praise.fi);
-    await expect(page.locator('.praise .verdict-ru')).toHaveText(praise.ru);
-    await expect(page.locator('.try-again')).toHaveCount(0);
-    expect(await page.evaluate(() => PRAISE.map(p => p.fi))).toContain(praise.fi);
+    await expect(page.locator('.verdict.praise .verdict-fi')).toHaveText(praise.fi);
+    await expect(page.locator('.verdict-ru.praise')).toHaveText(praise.ru);
+    // Финская фраза выше перевода, перевод — над клетками
+    const fiBox = await page.locator('.verdict-fi').boundingBox();
+    const ruBox = await page.locator('.verdict-ru').boundingBox();
+    const cellsBox = await page.locator('.cells').boundingBox();
+    expect(fiBox.y).toBeLessThan(ruBox.y - 40);
+    expect(ruBox.y).toBeLessThan(cellsBox.y);
     expect(await page.evaluate(() => window.__spoken)).toEqual([t.fi]);
     await expect(page.locator('#stat-correct')).toHaveText('1');
-    await expect(page.locator('#stat-wrong')).toHaveText('0');
-    await expect(page.locator('.cell.ok')).toHaveCount(1);
+    await expect(page.locator('.cell').first()).toHaveClass(/ok/);
   });
 
   test('похвала разная: не повторяется два раза подряд', async ({ page }) => {
     const seen = [];
     for (let i = 0; i < 6; i++) {
       await solve(page, true);
-      seen.push(await page.locator('.praise .verdict-fi').textContent());
+      seen.push(await page.locator('.verdict-fi').textContent());
       await tapEmpty(page);
     }
     for (let i = 1; i < seen.length; i++) expect(seen[i]).not.toBe(seen[i - 1]);
     expect(new Set(seen).size).toBeGreaterThan(2);
   });
 
-  test('неверное: красное поле, неверное слово красное, ниже правильный ответ и «Yritä uudelleen!»', async ({ page }) => {
+  test('неверно: красное поле, неверное слово красное, правильный ответ, «Yritä uudelleen!»', async ({ page }) => {
     const t = await task(page);
     const words = t.tokens.map(x => x.w);
     await pick(page, words[0]);
@@ -191,61 +212,132 @@ test.describe('составление предложений', () => {
     await expect(page.locator('.answer-field')).toHaveClass(/wrong/);
     await expect(page.locator('.chip.bad')).toHaveCount(1);
     await expect(page.locator('.chip').nth(1)).toHaveClass(/bad/);
-    await expect(page.locator('.chip').first()).not.toHaveClass(/bad/);
     await expect(page.locator('.right-answer')).toHaveText(t.fi);
-    await expect(page.locator('.try-again .verdict-fi')).toHaveText('Yritä uudelleen!');
-    await expect(page.locator('.try-again .verdict-ru')).toHaveText('Попробуй снова!');
-    await expect(page.locator('.praise')).toHaveCount(0);
+    await expect(page.locator('.verdict.try-again .verdict-fi')).toHaveText('Yritä uudelleen!');
+    await expect(page.locator('.verdict-ru.try-again')).toHaveText('Попробуй снова!');
     expect(await page.evaluate(() => window.__spoken)).toEqual([t.fi]);
-    await expect(page.locator('#stat-correct')).toHaveText('0');
     await expect(page.locator('#stat-wrong')).toHaveText('1');
-    await expect(page.locator('.cell.err')).toHaveCount(1);
+    await expect(page.locator('.cell').first()).toHaveClass(/err/);
 
-    // Нажатие на экран — то же предложение заново
+    // Клетка остаётся красной, идём дальше
     await tapEmpty(page);
-    expect(await page.evaluate(() => [sIdx, sChecked, sBuilt.length])).toEqual([0, false, 0]);
-    await expect(page.locator('.sentence-ru')).toHaveText(t.ru);
-    await solve(page, true);
-    await expect(page.locator('.cell.err')).toHaveCount(0);
-    await expect(page.locator('.cell.ok')).toHaveCount(1);
-    await expect(page.locator('#stat-correct')).toHaveText('1');
+    expect(await page.evaluate(() => ps.pos)).toBe(1);
+    await expect(page.locator('.cell').first()).toHaveClass(/err/);
   });
 
-  test('рейтинг: 0.1 звезды за каждые 2 верных ответа из последних 100', async ({ page }) => {
+  test('второй круг: пара с ошибкой возвращается, верный ответ красит клетку в голубой', async ({ page }) => {
+    const first = await task(page);
+    await solve(page, false);
+    await tapEmpty(page);
+    const keptPair = await page.evaluate(() => ps.slots[0]);
+    const otherPair = await page.evaluate(() => ps.slots[1]);
+
+    // Доходим до конца круга
+    await page.evaluate(() => {
+      ps.shown45 = true; // поздравление с 4.5 уже было
+      for (let i = 1; i < 100; i++) ps.cells[i] = 'ok';
+      ps.pos = 99;
+      resetSentence();
+      renderSentences();
+    });
+    await solve(page, true);
+    await tapEmpty(page);
+
+    expect(await page.evaluate(() => [ps.round, ps.pos])).toEqual([2, 0]);
+    expect(await page.evaluate(() => ps.slots[0])).toBe(keptPair);
+    expect(await page.evaluate(() => ps.slots[1])).not.toBe(otherPair);
+    await expect(page.locator('.cell').first()).toHaveClass(/err/);
+    expect((await task(page)).fi).toBe(first.fi);
+
+    await solve(page, true);
+    await expect(page.locator('.cell').first()).toHaveClass(/ok/);
+    await expect(page.locator('.cell.err')).toHaveCount(0);
+  });
+
+  test('рейтинг: 0.1 звезды за каждые 2 голубые клетки, 5.0 — все 100', async ({ page }) => {
     await solve(page, true);
     await expect(page.locator('#stat-rating')).toHaveText('0.0');
     await tapEmpty(page);
     await solve(page, true);
     await expect(page.locator('#stat-rating')).toHaveText('0.1');
-
-    // 99 верных подряд + ещё один = 100 подряд → 5.0
     await tapEmpty(page);
-    await page.evaluate(() => { stats.history = Array(99).fill(true); renderSentences(); });
-    await expect(page.locator('#stat-rating')).toHaveText('4.9');
-    await solve(page, true);
-    await expect(page.locator('#stat-rating')).toHaveText('5.0');
-    expect(await page.evaluate(() => stats.history.length)).toBe(100);
 
-    // Ошибка вытесняет самый старый верный ответ и снижает рейтинг
-    await tapEmpty(page);
-    await solve(page, false);
-    await expect(page.locator('#stat-rating')).toHaveText('4.9');
+    await setCells(page, 60, 10);
+    await expect(page.locator('#stat-rating')).toHaveText('3.0');
   });
 
-  test('счётчики и рейтинг сохраняются и видны в списке уроков', async ({ page }) => {
+  test('4.5 — поздравление, можно перейти к 1.2 или продолжить', async ({ page }) => {
+    await setCells(page, 89);
+    await solve(page, true);
+    await expect(page.locator('#stat-rating')).toHaveText('4.5');
+    await tapEmpty(page);
+
+    await expect(page.locator('#congrats h2')).toHaveText('Поздравляем, вам доступен следующий урок!');
+    await expect(page.locator('#congrats')).toContainText('Перейти к следующему или довести этот урок до совершенства?');
+    await page.click('#keep-going');
+    await expect(page.locator('.sentence-ru')).toBeVisible();
+    expect(await page.evaluate(() => ps.pos)).toBe(90);
+
+    // Второй раз поздравление не показывается
+    await solve(page, true);
+    await tapEmpty(page);
+    await expect(page.locator('#congrats')).toHaveCount(0);
+
+    await page.click('#back');
+    await expect(page.locator('#open-part-1-2')).not.toHaveClass(/locked/);
+    await page.click('#open-part-1-2');
+    await expect(page.locator('#back')).toContainText('Урок 1.2');
+    const q = await task(page);
+    expect(data.parts[1].pairs.some(p => p.q.fi === q.fi)).toBe(true);
+  });
+
+  test('кнопка «Перейти к уроку 1.2» открывает отрицание', async ({ page }) => {
+    await setCells(page, 89);
+    await solve(page, true);
+    await tapEmpty(page);
+    await page.click('#go-next');
+    await expect(page.locator('#back')).toContainText('Урок 1.2');
+    await expect(page.locator('#stat-rating')).toHaveText('0.0');
+  });
+
+  test('5.0 — «Поздравляем, урок пройден!» и можно продолжить', async ({ page }) => {
+    await page.evaluate(() => { ps.shown45 = true; });
+    await setCells(page, 99);
+    await solve(page, true);
+    await expect(page.locator('#stat-rating')).toHaveText('5.0');
+    await tapEmpty(page);
+    await expect(page.locator('#congrats h2')).toHaveText('Поздравляем, урок пройден!');
+    await page.click('#keep-going');
+    expect(await page.evaluate(() => [ps.round, ps.pos])).toEqual([2, 0]);
+    await expect(page.locator('.sentence-ru')).toBeVisible();
+  });
+
+  test('ниже 5.0 поздравления «урок пройден» нет', async ({ page }) => {
+    await page.evaluate(() => { ps.shown45 = true; });
+    await setCells(page, 97, 1);
+    await solve(page, true);
+    await expect(page.locator('#stat-rating')).toHaveText('4.9');
+    await tapEmpty(page);
+    await expect(page.locator('#congrats')).toHaveCount(0);
+  });
+
+  test('прогресс сохраняется: клетки, счётчики, рейтинг в списках', async ({ page }) => {
     await solve(page, true);
     await tapEmpty(page);
     await solve(page, true);
     await tapEmpty(page);
     await solve(page, false);
     await page.reload();
-    await expect(page.locator('#lesson-1 .circle')).toHaveText('0.1');
-    await expect(page.locator('#lesson-1 .circle')).toHaveClass(/orange/);
+    await expect(page.locator('#lesson-1 .circle')).toHaveText('0.0'); // среднее 1.1 и 1.2
     await page.click('#lesson-1');
-    await expect(page.locator('#open-sentences')).toContainText('Продолжить урок');
-    await page.click('#open-sentences');
+    await expect(page.locator('#open-part-1-1 .circle')).toHaveText('0.1');
+    await expect(page.locator('#open-part-1-2')).toHaveClass(/locked/);
+    await page.click('#open-part-1-1');
     await expect(page.locator('#stat-correct')).toHaveText('2');
     await expect(page.locator('#stat-wrong')).toHaveText('1');
+    await expect(page.locator('.cell.ok')).toHaveCount(2);
+    await expect(page.locator('.cell.err')).toHaveCount(1);
+    expect(await page.evaluate(() => ps.pos)).toBe(2);
   });
 
   test('«Ой, ошибся» убирает последнее слово; нажатие на слово — его и следующие', async ({ page }) => {
@@ -265,30 +357,5 @@ test.describe('составление предложений', () => {
     await page.click('#back');
     await expect(page.locator('.sentence-ru')).toHaveText(t.ru);
     await expect(page.locator('.chip')).toHaveCount(1);
-  });
-
-  test('после части 1 — часть 2 с отрицательными ответами, затем итог урока', async ({ page }) => {
-    async function finishPart() {
-      while (await page.locator('.word-option').count()) {
-        await solve(page, true);
-        await tapEmpty(page);
-      }
-    }
-    await finishPart();
-    await expect(page.locator('.done-screen h2')).toHaveText('Часть 1 пройдена');
-    await page.click('#next-part');
-    expect(await page.evaluate(() => sPart)).toBe(1);
-    await expect(page.locator('.sentence-ru')).toBeVisible();
-    const answers = await page.evaluate(() => sQueue.filter((_, i) => i % 2 === 1).map(t => t.fi));
-    answers.forEach(a => expect(a).toMatch(/^(En|Et|Ei|Emme|Ette|Eivät),/));
-
-    await finishPart();
-    await expect(page.locator('.done-screen h2')).toHaveText('Урок пройден');
-    await expect(page.locator('.done-screen p')).toContainText('ошибок: 0');
-    await expect(page.locator('#stat-correct')).toHaveText('40');
-    await expect(page.locator('#stat-rating')).toHaveText('2.0');
-    await page.click('#restart-sentences');
-    expect(await page.evaluate(() => [sPart, sIdx])).toEqual([0, 0]);
-    await expect(page.locator('.sentence-ru')).toBeVisible();
   });
 });

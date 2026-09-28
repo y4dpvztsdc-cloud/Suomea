@@ -127,7 +127,7 @@ function renderTrain() {
         <button class="restart-btn secondary" id="restart-words">Повторить слова</button>
       </div>
     `;
-    document.getElementById('to-sentences').addEventListener('click', showSentences);
+    document.getElementById('to-sentences').addEventListener('click', continueSentences);
     document.getElementById('restart-words').addEventListener('click', restart);
     return;
   }

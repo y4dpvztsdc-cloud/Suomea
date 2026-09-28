@@ -372,20 +372,24 @@ button { font-family: inherit; }
 }
 .right-answer .speaker-btn-inline { color: var(--text); }
 .verdict {
-  margin-top: auto;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
-  padding: 0 16px 10px;
+  padding: 0 16px;
   animation: verdict-in 0.35s ease-out;
 }
 .verdict-fi {
-  font-size: 38px;
+  font-size: 40px;
   font-weight: 700;
   line-height: 1.15;
 }
 .verdict-ru {
-  font-size: 14px;
+  text-align: center;
+  font-size: 15px;
   color: var(--text-muted);
-  margin-top: 4px;
+  padding: 0 16px 4px;
 }
 .praise .verdict-fi { color: var(--blue); }
 .try-again .verdict-fi { color: var(--wrong-bright); }
@@ -403,17 +407,17 @@ button { font-family: inherit; }
 }
 .cells {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(26px, 1fr));
-  gap: 3px;
-  padding: 0 16px 12px;
+  grid-template-columns: repeat(20, 1fr);
+  gap: 2px;
+  padding: 0 16px 10px;
 }
 .cell {
-  height: 7px;
+  height: 5px;
   border-radius: 1px;
   background: var(--cell);
 }
 .cell.ok { background: var(--blue); }
-.cell.err { background: var(--cell-err); }
+.cell.err { background: var(--wrong-bright); }
 .cell.current { background: var(--bar); }
 
 /* ---------- нижняя панель ---------- */
@@ -454,6 +458,8 @@ button { font-family: inherit; }
 .done-screen .big { font-size: 40px; }
 .done-screen h2 { margin: 0; font-size: 20px; }
 .done-screen p { margin: 0; color: var(--text-muted); font-size: 14px; }
+.congrats h2 { font-size: 22px; }
+.congrats p { font-size: 15px; max-width: 300px; line-height: 1.4; }
 .restart-btn {
   margin-top: 16px;
   background: var(--blue);

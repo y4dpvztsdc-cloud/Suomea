@@ -5,6 +5,10 @@
     "subtitle": "Глагол olla",
     "words": "data/lessons/1-words.json",
     "sentences": "data/lessons/1-sentences.json",
-    "description": "data/lessons/1-description.html"
+    "description": "data/lessons/1-description.html",
+    "parts": [
+      { "id": "1.1", "title": "Вопрос + утверждение", "set": "affirmative" },
+      { "id": "1.2", "title": "Вопрос + отрицание", "set": "negative" }
+    ]
   }
 ]

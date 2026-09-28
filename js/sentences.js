@@ -1,24 +1,13 @@
-// Основная часть урока: составление финских предложений по русскому переводу.
-// Часть 1 — вопросы и утвердительные ответы, часть 2 — вопросы и отрицательные ответы.
+// Составление финских предложений по русскому переводу (подуроки 1.1, 1.2 …).
+//
+// Внизу экрана 100 клеток — 100 предложений круга (50 пар вопрос/ответ).
+// Верный ответ красит клетку в голубой, неверный — в красный. Когда круг пройден,
+// начинается следующий: пары с красными клетками возвращаются, остальные меняются
+// на новые. Рейтинг = 0.1 звезды за каждые 2 голубые клетки, 5.0 — все 100 голубые.
 
-const PAIRS_PER_PART = 10; // сколько пар вопрос/ответ берётся в одну часть урока
+const CELLS = 100;
 const SENTENCE_OPTIONS = 6;
 const FI_WORD = /([A-Za-zÅÄÖåäö]+)([^A-Za-zÅÄÖåäö]*)/g;
-
-let sentenceData = null; // { groups, parts } из data/sentences.json
-let formGroup = {};      // словоформа в нижнем регистре -> имя группы
-let sPart = 0;
-let sQueue = [];         // задания: { ru, fi, tokens: [{ w, p }], cell }
-let sCells = [];         // клетки прогресса части: 'todo' | 'ok' | 'err'
-let sIdx = 0;
-let sBuilt = [];         // выбранные пользователем слова
-let sOptions = [];       // варианты для следующего слова
-let sChecked = false;
-let sLastCorrect = false;
-let sMistakes = 0;       // ошибки в текущей части
-let sPraise = null;      // похвала, показанная после верного ответа
-let sLessonCorrect = 0;
-let sLessonMistakes = 0;
 
 // Похвала за верно составленное предложение: крупно по-фински, мелко перевод
 const PRAISE = [
@@ -37,12 +26,18 @@ const PRAISE = [
   { fi: 'Jatka samaan malliin!', ru: 'Продолжай в том же духе!' },
   { fi: 'Sinä osaat tämän!', ru: 'У тебя получается!' },
 ];
+const TRY_AGAIN = { fi: 'Yritä uudelleen!', ru: 'Попробуй снова!' };
 
-// Случайная похвала, не повторяющая предыдущую
-function pickPraise() {
-  const choices = PRAISE.filter(p => p !== sPraise);
-  return choices[Math.floor(Math.random() * choices.length)];
-}
+let sentenceData = null; // { groups, parts } из файла предложений урока
+let formGroup = {};      // словоформа в нижнем регистре -> имя группы
+let part = null;         // открытый подурок из lessons.json
+let ps = null;           // сохранённое состояние подурока (см. newPartState)
+let sBuilt = [];         // выбранные пользователем слова
+let sOptions = [];       // варианты для следующего слова
+let sChecked = false;
+let sLastCorrect = false;
+let sPraise = null;
+let sCongrats = null;    // '4.5' | '5.0' — поздравление после этого ответа
 
 function setSentenceData(data) {
   sentenceData = data;
@@ -51,6 +46,58 @@ function setSentenceData(data) {
     group.forms.forEach(f => { formGroup[f.toLowerCase()] = name; });
   });
 }
+
+function partPairs(p = part) {
+  return sentenceData.parts.find(s => s.id === p.set).pairs;
+}
+
+// ---------- состояние подурока ----------
+
+function newPartState() {
+  return {
+    cells: Array(CELLS).fill('todo'), // 'todo' | 'ok' | 'err'
+    slots: [],       // номер пары для каждой пары клеток (2k — вопрос, 2k+1 — ответ)
+    pool: [],        // перемешанные номера пар, из них берутся новые
+    cursor: 0,
+    pos: 0,          // текущая клетка
+    round: 1,
+    correct: 0,
+    wrong: 0,
+    shown45: false,  // поздравления показываются один раз
+    shown50: false,
+  };
+}
+
+function nextPair() {
+  if (ps.cursor >= ps.pool.length) {
+    ps.pool = shuffle(partPairs().map((_, i) => i));
+    ps.cursor = 0;
+  }
+  return ps.pool[ps.cursor++];
+}
+
+// Пары с ошибкой остаются на следующий круг, остальные заменяются новыми
+function fillSlots() {
+  for (let k = 0; k < CELLS / 2; k++) {
+    const failed = ps.cells[2 * k] === 'err' || ps.cells[2 * k + 1] === 'err';
+    if (ps.slots[k] === undefined || !failed) ps.slots[k] = nextPair();
+  }
+}
+
+function partRating(state) {
+  const ok = state.cells.filter(c => c === 'ok').length;
+  return Math.floor(ok / 2) / 10;
+}
+
+function openPart(p) {
+  part = p;
+  ps = loadPartState(p.id) || newPartState();
+  if (!ps.slots.length) fillSlots();
+  savePartState(p.id, ps);
+  resetSentence();
+}
+
+// ---------- задание ----------
 
 // "Joo, minä olen autossa." -> [{w:'Joo', p:','}, {w:'minä', p:''}, ..., {w:'autossa', p:'.'}]
 function tokenize(sentence) {
@@ -61,18 +108,10 @@ function capitalize(word) {
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
-function makeTask(s, cell) {
-  return { ru: s.ru, fi: s.fi, tokens: tokenize(s.fi), cell };
-}
-
-function buildSentenceQueue(partIndex) {
-  const pairs = shuffle(sentenceData.parts[partIndex].pairs).slice(0, PAIRS_PER_PART);
-  const tasks = [];
-  pairs.forEach(pair => {
-    tasks.push(makeTask(pair.q, tasks.length));
-    tasks.push(makeTask(pair.a, tasks.length));
-  });
-  return tasks;
+function currentTask() {
+  const pair = partPairs()[ps.slots[Math.floor(ps.pos / 2)]];
+  const s = ps.pos % 2 === 0 ? pair.q : pair.a;
+  return { ru: s.ru, fi: s.fi, tokens: tokenize(s.fi), cell: ps.pos };
 }
 
 // Правильное слово + 5 неверных из той же группы словоформ (при нехватке — из группы pad)
@@ -96,10 +135,6 @@ function pickWordOptions(token, position) {
   return shuffle([token.w, ...distractors].map(show));
 }
 
-function currentTask() {
-  return sQueue[sIdx];
-}
-
 function prepareOptions() {
   const task = currentTask();
   sOptions = sBuilt.length < task.tokens.length
@@ -107,84 +142,43 @@ function prepareOptions() {
     : [];
 }
 
-function startPart(partIndex) {
-  sPart = partIndex;
-  sQueue = buildSentenceQueue(partIndex);
-  sCells = sQueue.map(() => 'todo');
-  sIdx = 0;
-  sMistakes = 0;
-  resetSentence();
-  if (currentView === 'sentences') renderSentences();
-}
-
-function startSentences() {
-  sLessonCorrect = 0;
-  sLessonMistakes = 0;
-  startPart(0);
-}
-
 function resetSentence() {
   sBuilt = [];
   sChecked = false;
   sLastCorrect = false;
-  if (sIdx < sQueue.length) prepareOptions();
+  sCongrats = null;
+  prepareOptions();
 }
+
+// Случайная похвала, не повторяющая предыдущую
+function pickPraise() {
+  const choices = PRAISE.filter(p => p !== sPraise);
+  return choices[Math.floor(Math.random() * choices.length)];
+}
+
+// ---------- экран ----------
 
 function sentenceTopbar() {
   renderTopbar({
     back: showLesson,
-    backLabel: lesson.title,
+    backLabel: `Урок ${part.id}`,
     right: `
-      <span class="stat" title="Рейтинг">${starIcon()}<b id="stat-rating">${rating(stats).toFixed(1)}</b></span>
-      <span class="stat" title="Верно">${checkIcon()}<b id="stat-correct">${stats.correct}</b></span>
-      <span class="stat" title="Ошибки">${crossIcon()}<b id="stat-wrong">${stats.wrong}</b></span>
+      <span class="stat" title="Рейтинг">${starIcon()}<b id="stat-rating">${partRating(ps).toFixed(1)}</b></span>
+      <span class="stat" title="Верно">${checkIcon()}<b id="stat-correct">${ps.correct}</b></span>
+      <span class="stat" title="Ошибки">${crossIcon()}<b id="stat-wrong">${ps.wrong}</b></span>
     `,
   });
 }
 
 function renderCells() {
-  const cells = sCells.map((state, i) => {
-    const current = !sChecked && sIdx < sQueue.length && currentTask().cell === i;
-    return `<span class="cell ${state}${current ? ' current' : ''}"></span>`;
-  }).join('');
+  const cells = ps.cells.map((state, i) =>
+    `<span class="cell ${state}${i === ps.pos ? ' current' : ''}"></span>`
+  ).join('');
   return `<div class="cells" id="cells">${cells}</div>`;
-}
-
-function renderSentenceDone() {
-  const last = sPart === sentenceData.parts.length - 1;
-  const body = document.getElementById('app-body');
-  if (!last) {
-    const next = sentenceData.parts[sPart + 1];
-    body.innerHTML = `
-      <div class="done-screen">
-        <div class="big">&#9989;</div>
-        <h2>Часть ${sPart + 1} пройдена</h2>
-        <p>${sentenceData.parts[sPart].title}. Ошибок: ${sMistakes}</p>
-        <button class="restart-btn" id="next-part">Часть ${sPart + 2}: ${next.title.toLowerCase()}</button>
-      </div>
-    `;
-    document.getElementById('next-part').addEventListener('click', () => startPart(sPart + 1));
-    return;
-  }
-  const pct = Math.round((sLessonCorrect / (sLessonCorrect + sLessonMistakes)) * 100);
-  body.innerHTML = `
-    <div class="done-screen">
-      <div class="big">&#127942;</div>
-      <h2>Урок пройден</h2>
-      <p>Точность: ${pct}% (ошибок: ${sLessonMistakes})</p>
-      <button class="restart-btn" id="restart-sentences">Повторить предложения</button>
-    </div>
-  `;
-  document.getElementById('restart-sentences').addEventListener('click', startSentences);
 }
 
 function renderSentences() {
   sentenceTopbar();
-  if (sIdx >= sQueue.length) {
-    renderBottombar('');
-    renderSentenceDone();
-    return;
-  }
   renderBottombar(`
     <button class="barbtn" id="oops">${undoIcon()}Ой, ошибся</button>
     <button class="barbtn" id="help">${bookIcon()}Помощь</button>
@@ -200,34 +194,32 @@ function renderSentences() {
     return `<span class="chip${bad ? ' bad' : ''}" data-pos="${i}">${w}${task.tokens[i].p}</span>`;
   }).join('');
 
-  // Под полем — правильный ответ (после ошибки); внизу экрана — похвала или «попробуй снова»
+  // После проверки: крупная фраза по-фински посередине белого поля, перевод — внизу
   let answer = '';
-  let verdict = '';
-  if (sChecked && sLastCorrect) {
-    verdict = `
-      <div class="verdict praise">
-        <div class="verdict-fi">${sPraise.fi}</div>
-        <div class="verdict-ru">${sPraise.ru}</div>
-      </div>
-    `;
-  } else if (sChecked) {
-    answer = `
-      <div class="right-answer" id="right-answer">
-        <button class="speaker-btn-inline" id="speak-answer" aria-label="Произнести">${speakerSvg(20)}</button>
-        <span>${task.fi}</span>
-      </div>
-    `;
-    verdict = `
-      <div class="verdict try-again">
-        <div class="verdict-fi">Yritä uudelleen!</div>
-        <div class="verdict-ru">Попробуй снова!</div>
-      </div>
-    `;
+  let middle = `
+    <div class="options six">
+      ${sOptions.map(o => `<div class="option word-option">${o}</div>`).join('')}
+    </div>
+  `;
+  let translation = '';
+  if (sChecked) {
+    const verdict = sLastCorrect ? sPraise : TRY_AGAIN;
+    const cls = sLastCorrect ? 'praise' : 'try-again';
+    if (!sLastCorrect) {
+      answer = `
+        <div class="right-answer" id="right-answer">
+          <button class="speaker-btn-inline" id="speak-answer" aria-label="Произнести">${speakerSvg(20)}</button>
+          <span>${task.fi}</span>
+        </div>
+      `;
+    }
+    middle = `<div class="verdict ${cls}"><div class="verdict-fi">${verdict.fi}</div></div>`;
+    translation = `<div class="verdict-ru ${cls}">${verdict.ru}</div>`;
   }
 
   let hint = '';
-  if (sChecked && sLastCorrect) hint = 'Нажмите на экран, чтобы продолжить';
-  else if (!sChecked && complete) hint = 'Нажмите на экран, чтобы проверить';
+  if (sChecked) hint = 'Нажмите на экран, чтобы продолжить';
+  else if (complete) hint = 'Нажмите на экран, чтобы проверить';
 
   document.getElementById('app-body').innerHTML = `
     <div class="sentence-screen" id="sentence-screen">
@@ -236,10 +228,8 @@ function renderSentences() {
         <div class="built-words">${built}</div>
       </div>
       ${answer}
-      <div class="options six">
-        ${sOptions.map(o => `<div class="option word-option">${o}</div>`).join('')}
-      </div>
-      ${verdict}
+      ${middle}
+      ${translation}
       <div class="tap-hint">${hint}</div>
       ${renderCells()}
     </div>
@@ -266,12 +256,7 @@ function renderSentences() {
   });
   document.getElementById('help').addEventListener('click', () => showDescription(showSentences));
   const speak = document.getElementById('speak-answer');
-  if (speak) {
-    speak.addEventListener('click', e => {
-      e.stopPropagation();
-      speakFinnish(task.fi);
-    });
-  }
+  if (speak) speak.addEventListener('click', () => speakFinnish(task.fi));
 }
 
 function chooseWord(word) {
@@ -291,23 +276,73 @@ function checkSentence() {
   const task = currentTask();
   sLastCorrect = task.tokens.every((t, i) => t.w.toLowerCase() === sBuilt[i].toLowerCase());
   sChecked = true;
-  recordSentence(sLastCorrect);
+  ps.cells[ps.pos] = sLastCorrect ? 'ok' : 'err';
   if (sLastCorrect) {
-    sLessonCorrect++;
-    sCells[task.cell] = 'ok';
+    ps.correct++;
     sPraise = pickPraise();
   } else {
-    sMistakes++;
-    sLessonMistakes++;
-    sCells[task.cell] = 'err';
+    ps.wrong++;
   }
+
+  const r = partRating(ps);
+  if (r >= 5 && !ps.shown50) {
+    sCongrats = '5.0';
+    ps.shown50 = true;
+    ps.shown45 = true;
+  } else if (r >= PASS_RATING && !ps.shown45) {
+    sCongrats = '4.5';
+    ps.shown45 = true;
+  }
+  savePartState(part.id, ps);
   speakFinnish(task.fi);
   renderSentences();
 }
 
-// После верного ответа — следующее предложение, после ошибки — это же ещё раз
 function nextSentence() {
-  if (sLastCorrect) sIdx++;
+  const congrats = sCongrats;
+  ps.pos++;
+  if (ps.pos >= CELLS) {
+    ps.pos = 0;
+    ps.round++;
+    fillSlots();
+  }
+  savePartState(part.id, ps);
   resetSentence();
-  renderSentences();
+  if (congrats) renderCongrats(congrats);
+  else renderSentences();
+}
+
+// ---------- поздравления ----------
+
+function renderCongrats(level) {
+  const next = nextPartAfter(part);
+  renderBottombar('');
+  const nextName = next ? `${next.part.id} «${next.part.title}»` : '';
+  const body = document.getElementById('app-body');
+  if (level === '5.0') {
+    body.innerHTML = `
+      <div class="done-screen congrats" id="congrats">
+        <div class="big">&#127942;</div>
+        <h2>Поздравляем, урок пройден!</h2>
+        <p>Рейтинг 5.0 — 100 верных ответов подряд.</p>
+        <button class="restart-btn" id="keep-going">Продолжить</button>
+        ${next ? `<button class="restart-btn secondary" id="go-next">Перейти к уроку ${next.part.id}</button>` : ''}
+      </div>
+    `;
+  } else {
+    body.innerHTML = `
+      <div class="done-screen congrats" id="congrats">
+        <div class="big">&#127881;</div>
+        <h2>${next ? 'Поздравляем, вам доступен следующий урок!' : 'Поздравляем, вы набрали 4.5!'}</h2>
+        <p>${next
+          ? `Урок ${nextName} открыт. Перейти к следующему или довести этот урок до совершенства?`
+          : 'Следующий урок скоро появится. Можно довести этот урок до совершенства — 5.0.'}</p>
+        ${next ? `<button class="restart-btn" id="go-next">Перейти к уроку ${next.part.id}</button>` : ''}
+        <button class="restart-btn ${next ? 'secondary' : ''}" id="keep-going">Довести до 5.0</button>
+      </div>
+    `;
+  }
+  document.getElementById('keep-going').addEventListener('click', renderSentences);
+  const go = document.getElementById('go-next');
+  if (go) go.addEventListener('click', () => openNextPart(next));
 }
