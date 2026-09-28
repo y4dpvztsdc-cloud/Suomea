@@ -1,7 +1,9 @@
 // Экраны приложения, навигация, данные уроков и сохранение прогресса
 
-const RATING_WINDOW = 40; // рейтинг 0–5 считается по последним 40 проверенным предложениям
-const GOOD_RATING = 4.5;  // от этого значения кружок рейтинга синий, ниже — оранжевый
+// Рейтинг 0–5: каждые 2 верных предложения из последних 100 дают 0.1 звезды,
+// поэтому 5.0 — это 100 верных ответов подряд.
+const RATING_WINDOW = 100;
+const PASS_RATING = 4.5;  // с таким рейтингом открывается следующий урок, кружок синий
 
 let lessons = [];     // список уроков из data/lessons.json
 let lesson = null;    // открытый урок
@@ -35,7 +37,13 @@ function saveStats() {
 }
 
 function rating(s) {
-  return (5 * s.history.filter(Boolean).length) / RATING_WINDOW;
+  const ok = s.history.slice(-RATING_WINDOW).filter(Boolean).length;
+  return Math.floor(ok / 2) / 10;
+}
+
+// Первый урок открыт всегда, следующий — когда в предыдущем набрано 4.5
+function isUnlocked(index) {
+  return index === 0 || rating(loadStats(lessons[index - 1].id)) >= PASS_RATING;
 }
 
 function recordSentence(ok) {
@@ -84,7 +92,7 @@ function renderBottombar(html) {
 }
 
 function ratingCircle(value) {
-  const cls = value >= GOOD_RATING ? 'blue' : 'orange';
+  const cls = value >= PASS_RATING ? 'blue' : 'orange';
   return `<span class="circle ${cls}">${value.toFixed(1)}</span>`;
 }
 
@@ -105,7 +113,7 @@ function showHome(tab = homeTab) {
   }
   body.innerHTML = `
     <div class="list">
-      ${lessons.map(l => `
+      ${lessons.map((l, i) => isUnlocked(i) ? `
         <button class="list-row" id="lesson-${l.id}" data-id="${l.id}">
           ${ratingCircle(rating(loadStats(l.id)))}
           <span class="list-text">
@@ -113,10 +121,18 @@ function showHome(tab = homeTab) {
             <span class="list-sub">${l.subtitle}</span>
           </span>
         </button>
+      ` : `
+        <div class="list-row locked" id="lesson-${l.id}">
+          <span class="circle grey">${lockIcon()}</span>
+          <span class="list-text">
+            <span class="list-title">${l.title}</span>
+            <span class="list-sub">Откроется, когда в «${lessons[i - 1].title}» будет ${PASS_RATING.toFixed(1)}</span>
+          </span>
+        </div>
       `).join('')}
     </div>
   `;
-  body.querySelectorAll('.list-row').forEach(row => {
+  body.querySelectorAll('button.list-row').forEach(row => {
     row.addEventListener('click', () => openLesson(Number(row.dataset.id)));
   });
 }
@@ -259,6 +275,10 @@ function undoIcon() {
 
 function bookIcon() {
   return `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><circle cx="12" cy="12" r="10.5"/><path d="M6.5 8.5c2-.8 4-.6 5.5.6v8c-1.5-1.2-3.5-1.4-5.5-.6zM17.5 8.5c-2-.8-4-.6-5.5.6v8c1.5-1.2 3.5-1.4 5.5-.6z"/></svg>`;
+}
+
+function lockIcon() {
+  return `<svg width="20" height="22" viewBox="0 0 20 22" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="9" width="16" height="12" rx="2.5" fill="currentColor"/><path d="M5.5 9V6.5a4.5 4.5 0 0 1 9 0V9"/></svg>`;
 }
 
 function readerIcon() {

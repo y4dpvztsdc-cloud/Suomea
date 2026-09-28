@@ -49,11 +49,40 @@ test('вкладка «Словарь» показывает слова урок
   await expect(page.locator('#lesson-1')).toBeVisible();
 });
 
-test('кружок рейтинга синий от 4.5', async ({ page }) => {
-  await page.evaluate(() => {
-    localStorage.setItem('suomea.lesson.1', JSON.stringify({ history: Array(36).fill(true), correct: 36, wrong: 0, wordsPct: 5 }));
-  });
+const setHistory = (page, ok, total = ok) => page.evaluate(([ok, total]) => {
+  const history = Array(total - ok).fill(false).concat(Array(ok).fill(true));
+  localStorage.setItem('suomea.lesson.1', JSON.stringify({ history, correct: ok, wrong: total - ok, wordsPct: 5 }));
+}, [ok, total]);
+
+test('кружок рейтинга: 89 верных из 100 — 4.4 оранжевый, 90 — 4.5 синий', async ({ page }) => {
+  await setHistory(page, 89, 100);
+  await page.reload();
+  await expect(page.locator('#lesson-1 .circle')).toHaveText('4.4');
+  await expect(page.locator('#lesson-1 .circle')).toHaveClass(/orange/);
+
+  await setHistory(page, 90, 100);
   await page.reload();
   await expect(page.locator('#lesson-1 .circle')).toHaveText('4.5');
   await expect(page.locator('#lesson-1 .circle')).toHaveClass(/blue/);
+});
+
+test('следующий урок открывается при рейтинге 4.5 в предыдущем', async ({ page }) => {
+  // Подставляем второй урок в список
+  await page.route('**/data/lessons.json', route => route.fulfill({
+    json: lessons.concat({ ...lessons[0], id: 2, title: 'Урок 2', subtitle: 'Проверка' }),
+  }));
+  await setHistory(page, 89, 100);
+  await page.reload();
+  const second = page.locator('#lesson-2');
+  await expect(second).toHaveClass(/locked/);
+  await expect(second).toContainText('Откроется, когда в «Урок 1» будет 4.5');
+  await second.click();
+  await expect(page.locator('#lesson-2')).toBeVisible(); // остались на главном экране
+
+  await setHistory(page, 90, 100);
+  await page.reload();
+  await expect(page.locator('#lesson-2')).not.toHaveClass(/locked/);
+  await expect(page.locator('#lesson-2 .circle')).toHaveText('0.0');
+  await page.click('#lesson-2');
+  await expect(page.locator('#header-title')).toHaveText('Урок 2');
 });

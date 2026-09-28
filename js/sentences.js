@@ -16,8 +16,33 @@ let sOptions = [];       // варианты для следующего сло�
 let sChecked = false;
 let sLastCorrect = false;
 let sMistakes = 0;       // ошибки в текущей части
+let sPraise = null;      // похвала, показанная после верного ответа
 let sLessonCorrect = 0;
 let sLessonMistakes = 0;
+
+// Похвала за верно составленное предложение: крупно по-фински, мелко перевод
+const PRAISE = [
+  { fi: 'Hienoa!', ru: 'Отлично!' },
+  { fi: 'Erinomaista!', ru: 'Превосходно!' },
+  { fi: 'Loistavaa!', ru: 'Блестяще!' },
+  { fi: 'Mahtavaa!', ru: 'Потрясающе!' },
+  { fi: 'Upeaa!', ru: 'Великолепно!' },
+  { fi: 'Mainiota!', ru: 'Замечательно!' },
+  { fi: 'Täydellistä!', ru: 'Идеально!' },
+  { fi: 'Hyvin tehty!', ru: 'Хорошая работа!' },
+  { fi: 'Juuri niin!', ru: 'Именно так!' },
+  { fi: 'Aivan oikein!', ru: 'Совершенно верно!' },
+  { fi: 'Olet taitava!', ru: 'Ты молодец!' },
+  { fi: 'Kerrassaan hienoa!', ru: 'Просто замечательно!' },
+  { fi: 'Jatka samaan malliin!', ru: 'Продолжай в том же духе!' },
+  { fi: 'Sinä osaat tämän!', ru: 'У тебя получается!' },
+];
+
+// Случайная похвала, не повторяющая предыдущую
+function pickPraise() {
+  const choices = PRAISE.filter(p => p !== sPraise);
+  return choices[Math.floor(Math.random() * choices.length)];
+}
 
 function setSentenceData(data) {
   sentenceData = data;
@@ -167,29 +192,54 @@ function renderSentences() {
 
   const task = currentTask();
   const complete = sBuilt.length === task.tokens.length;
-  const part = sentenceData.parts[sPart];
   const state = sChecked ? (sLastCorrect ? ' correct' : ' wrong') : '';
 
-  const built = sBuilt.map((w, i) => `<span class="chip" data-pos="${i}">${w}${task.tokens[i].p}</span>`).join('');
-  const answer = sChecked && !sLastCorrect
-    ? `<div class="right-answer">${task.fi}</div>`
-    : '';
+  // После неверной проверки ошибочные слова выделяются ярко-красным
+  const built = sBuilt.map((w, i) => {
+    const bad = sChecked && w.toLowerCase() !== task.tokens[i].w.toLowerCase();
+    return `<span class="chip${bad ? ' bad' : ''}" data-pos="${i}">${w}${task.tokens[i].p}</span>`;
+  }).join('');
+
+  // Под полем — правильный ответ (после ошибки); внизу экрана — похвала или «попробуй снова»
+  let answer = '';
+  let verdict = '';
+  if (sChecked && sLastCorrect) {
+    verdict = `
+      <div class="verdict praise">
+        <div class="verdict-fi">${sPraise.fi}</div>
+        <div class="verdict-ru">${sPraise.ru}</div>
+      </div>
+    `;
+  } else if (sChecked) {
+    answer = `
+      <div class="right-answer" id="right-answer">
+        <button class="speaker-btn-inline" id="speak-answer" aria-label="Произнести">${speakerSvg(20)}</button>
+        <span>${task.fi}</span>
+      </div>
+    `;
+    verdict = `
+      <div class="verdict try-again">
+        <div class="verdict-fi">Yritä uudelleen!</div>
+        <div class="verdict-ru">Попробуй снова!</div>
+      </div>
+    `;
+  }
 
   let hint = '';
-  if (sChecked) hint = 'Нажмите на экран, чтобы продолжить';
-  else if (complete) hint = 'Нажмите на экран, чтобы проверить';
+  if (sChecked && sLastCorrect) hint = 'Нажмите на экран, чтобы продолжить';
+  else if (!sChecked && complete) hint = 'Нажмите на экран, чтобы проверить';
 
   document.getElementById('app-body').innerHTML = `
     <div class="sentence-screen" id="sentence-screen">
-      <div class="part-label">Часть ${sPart + 1} из ${sentenceData.parts.length} · ${part.title}</div>
       <div class="sentence-ru">${task.ru}</div>
       <div class="answer-field${state}" id="built">
         <div class="built-words">${built}</div>
-        ${answer}
       </div>
+      ${answer}
       <div class="options six">
         ${sOptions.map(o => `<div class="option word-option">${o}</div>`).join('')}
       </div>
+      ${verdict}
       <div class="tap-hint">${hint}</div>
       ${renderCells()}
     </div>
@@ -206,7 +256,8 @@ function renderSentences() {
   }
   // Проверка и переход дальше — нажатием на пустое место экрана
   document.getElementById('sentence-screen').addEventListener('click', e => {
-    if (e.target.closest('.word-option, .chip')) return;
+    if (e.target.closest('.word-option, #speak-answer')) return;
+    if (!sChecked && e.target.closest('.chip')) return;
     if (sChecked) nextSentence();
     else if (complete) checkSentence();
   });
@@ -214,6 +265,13 @@ function renderSentences() {
     if (!sChecked && sBuilt.length) undoFrom(sBuilt.length - 1);
   });
   document.getElementById('help').addEventListener('click', () => showDescription(showSentences));
+  const speak = document.getElementById('speak-answer');
+  if (speak) {
+    speak.addEventListener('click', e => {
+      e.stopPropagation();
+      speakFinnish(task.fi);
+    });
+  }
 }
 
 function chooseWord(word) {
@@ -237,19 +295,19 @@ function checkSentence() {
   if (sLastCorrect) {
     sLessonCorrect++;
     sCells[task.cell] = 'ok';
+    sPraise = pickPraise();
   } else {
     sMistakes++;
     sLessonMistakes++;
     sCells[task.cell] = 'err';
-    // Неверно составленное предложение вернётся через несколько заданий
-    sQueue.splice(Math.min(sIdx + 1 + RETRY_GAP, sQueue.length), 0, task);
   }
   speakFinnish(task.fi);
   renderSentences();
 }
 
+// После верного ответа — следующее предложение, после ошибки — это же ещё раз
 function nextSentence() {
-  sIdx++;
+  if (sLastCorrect) sIdx++;
   resetSentence();
   renderSentences();
 }
