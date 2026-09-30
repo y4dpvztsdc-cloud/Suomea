@@ -94,7 +94,15 @@ function partRating(state) {
 function openPart(p) {
   part = p;
   ps = loadPartState(p.id) || newPartState();
-  if (ps.pair === null) ps.pair = nextPair();
+  // Если набор предложений изменился (другое число пар) — начинаем выбор пар заново
+  const count = partPairs().length;
+  if (ps.pool.length !== count || ps.pair === null || ps.pair >= count) {
+    ps.pool = [];
+    ps.cursor = 0;
+    ps.stage = 0;
+    ps.attempts = 1;
+    ps.pair = nextPair();
+  }
   savePartState(p.id, ps);
   resetSentence();
 }

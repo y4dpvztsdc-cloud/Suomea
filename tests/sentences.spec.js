@@ -6,10 +6,10 @@ const index = {};
 Object.entries(data.groups).forEach(([name, g]) => g.forms.forEach(f => { index[f.toLowerCase()] = name; }));
 
 test.describe('данные предложений', () => {
-  test('две части по 200 пар вопрос/ответ', () => {
+  test('две части по 100 пар вопрос/ответ', () => {
     expect(data.parts.map(p => p.id)).toEqual(['affirmative', 'negative']);
     for (const part of data.parts) {
-      expect(part.pairs).toHaveLength(200);
+      expect(part.pairs).toHaveLength(100);
       for (const pair of part.pairs) {
         for (const s of [pair.q, pair.a]) {
           expect(s.fi).toMatch(/[.?]$/);
@@ -26,6 +26,14 @@ test.describe('данные предложений', () => {
     }
     for (const pair of data.parts[0].pairs) {
       expect(pair.a.fi).not.toMatch(/\b(en|et|ei|emme|ette|eivät)\b/i);
+    }
+  });
+
+  test('русский перевод после «Нет,» / «Да,» не начинается с заглавного местоимения', () => {
+    for (const part of data.parts) {
+      for (const pair of part.pairs) {
+        expect(pair.a.ru).not.toMatch(/^(Нет|Да), (Он|Она|Они)\b/);
+      }
     }
   });
 
@@ -138,7 +146,7 @@ test.describe('составление предложений', () => {
     expect(new Set(seen).size).toBe(6);
     // Порядок пар — случайный, а не по номерам
     const pool = await page.evaluate(() => ps.pool);
-    expect(pool).toHaveLength(200);
+    expect(pool).toHaveLength(100);
     expect(pool).not.toEqual([...pool].sort((x, y) => x - y));
   });
 
@@ -360,6 +368,20 @@ test.describe('составление предложений', () => {
     await expect(page.locator('.cell.err')).toHaveCount(1);
     expect(await page.evaluate(() => ps.pos)).toBe(3);
     await expect(page.locator('.cell').nth(3)).toHaveClass(/current/);
+  });
+
+  test('сохранённая пара из старого, большего набора не ломает урок', async ({ page }) => {
+    await page.evaluate(() => {
+      const saved = JSON.parse(localStorage.getItem('suomea.v3.lesson.1'));
+      saved.parts['1.1'].pair = 150;
+      saved.parts['1.1'].pool = Array.from({ length: 200 }, (_, i) => i);
+      localStorage.setItem('suomea.v3.lesson.1', JSON.stringify(saved));
+    });
+    await page.reload();
+    await page.click('#lesson-1');
+    await page.click('#open-part-1-1');
+    await expect(page.locator('.word-option')).toHaveCount(6);
+    expect(await page.evaluate(() => [ps.pool.length, ps.pair < 100, ps.stage])).toEqual([100, true, 0]);
   });
 
   test('«Ой, ошибся» убирает последнее слово; нажатие на слово — его и следующие', async ({ page }) => {

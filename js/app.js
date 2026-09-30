@@ -13,7 +13,7 @@ let homeTab = 'lessons';
 // ---------- прогресс в localStorage ----------
 
 function storageKey(id) {
-  return `suomea.v2.lesson.${id}`;
+  return `suomea.v3.lesson.${id}`;
 }
 
 function loadStats(id) {

@@ -20,7 +20,7 @@ test('главный экран: список уроков с рейтингом
 test('экран урока: 1.1 утверждение, 1.2 отрицание (закрыт), слова, описание', async ({ page }) => {
   await page.click('#lesson-1');
   await expect(page.locator('#header-title')).toHaveText('Урок 1');
-  await expect(page.locator('.lesson-title')).toHaveText('Глагол olla');
+  await expect(page.locator('.lesson-title')).toHaveText('Глагол olla: кто это и чьё это');
   await expect(page.locator('#open-part-1-1')).toContainText('Урок 1.1');
   await expect(page.locator('#open-part-1-1')).toContainText('Вопрос + утверждение');
   await expect(page.locator('#open-part-1-1 .circle')).toHaveText('0.0');
@@ -42,7 +42,7 @@ test('описание урока', async ({ page }) => {
   await page.click('#lesson-1');
   await page.click('#open-description');
   await expect(page.locator('#header-title')).toHaveText('Описание урока');
-  await expect(page.locator('.description')).toContainText('minä olen');
+  await expect(page.locator('.description')).toContainText('Minä olen');
   await expect(page.locator('.description')).toContainText('eivät');
   await page.click('#back');
   await expect(page.locator('.lesson-title')).toBeVisible();
@@ -65,7 +65,7 @@ const setProgress = (page, parts) => page.evaluate(parts => {
   });
   const saved = { wordsPct: 5, parts: {} };
   Object.entries(parts).forEach(([id, ok]) => { saved.parts[id] = state(ok); });
-  localStorage.setItem('suomea.v2.lesson.1', JSON.stringify(saved));
+  localStorage.setItem('suomea.v3.lesson.1', JSON.stringify(saved));
 }, parts);
 
 test('кружки рейтинга: 4.4 оранжевый, 4.5 синий; у урока — среднее по 1.1 и 1.2', async ({ page }) => {

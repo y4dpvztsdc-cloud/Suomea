@@ -23,7 +23,8 @@
   --wrong-bg: #FBE9E8;
 }
 * { box-sizing: border-box; }
-html, body { height: 100%; }
+html { height: 100%; }
+body { min-height: 100%; }
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -214,6 +215,9 @@ button { font-family: inherit; }
 .description table { border-collapse: collapse; }
 .description td { padding: 3px 18px 3px 0; }
 .description td + td { color: var(--text-muted); }
+.description table.conj td { color: var(--text); padding-right: 12px; }
+.description table.conj tr:first-child td { color: var(--text-muted); font-size: 13px; }
+.description table.conj td:first-child { color: var(--text-muted); }
 .description .note { color: var(--text-muted); font-size: 14px; }
 
 /* ---------- словарь ---------- */

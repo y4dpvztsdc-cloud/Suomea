@@ -2,7 +2,7 @@
   {
     "id": 1,
     "title": "Урок 1",
-    "subtitle": "Глагол olla",
+    "subtitle": "Глагол olla: кто это и чьё это",
     "words": "data/lessons/1-words.json",
     "sentences": "data/lessons/1-sentences.json",
     "description": "data/lessons/1-description.html",
