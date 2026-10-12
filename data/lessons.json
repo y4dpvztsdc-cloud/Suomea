@@ -7,8 +7,76 @@
     "sentences": "data/lessons/1-sentences.json",
     "description": "data/lessons/1-description.html",
     "parts": [
-      { "id": "1.1", "title": "Вопрос + утверждение", "set": "affirmative" },
-      { "id": "1.2", "title": "Вопрос + отрицание", "set": "negative" }
+      {
+        "id": "1.1",
+        "title": "Вопрос + утверждение",
+        "set": "affirmative"
+      },
+      {
+        "id": "1.2",
+        "title": "Вопрос + отрицание",
+        "set": "negative"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "title": "Урок 2",
+    "subtitle": "Где? Места и падежные формы",
+    "words": "data/lessons/2-words.json",
+    "sentences": "data/lessons/2-sentences.json",
+    "description": "data/lessons/2-description.html",
+    "parts": [
+      {
+        "id": "2.1",
+        "title": "Вопрос + утверждение",
+        "set": "affirmative"
+      },
+      {
+        "id": "2.2",
+        "title": "Вопрос + отрицание",
+        "set": "negative"
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "title": "Урок 3",
+    "subtitle": "Что это? Профессии, предметы, животные",
+    "words": "data/lessons/3-words.json",
+    "sentences": "data/lessons/3-sentences.json",
+    "description": "data/lessons/3-description.html",
+    "parts": [
+      {
+        "id": "3.1",
+        "title": "Вопрос + утверждение",
+        "set": "affirmative"
+      },
+      {
+        "id": "3.2",
+        "title": "Вопрос + отрицание",
+        "set": "negative"
+      }
+    ]
+  },
+  {
+    "id": 4,
+    "title": "Урок 4",
+    "subtitle": "У меня есть: minulla on",
+    "words": "data/lessons/4-words.json",
+    "sentences": "data/lessons/4-sentences.json",
+    "description": "data/lessons/4-description.html",
+    "parts": [
+      {
+        "id": "4.1",
+        "title": "Вопрос + утверждение",
+        "set": "affirmative"
+      },
+      {
+        "id": "4.2",
+        "title": "Вопрос + отрицание",
+        "set": "negative"
+      }
     ]
   }
 ]

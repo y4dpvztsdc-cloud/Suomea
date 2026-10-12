@@ -370,6 +370,25 @@ test.describe('составление предложений', () => {
     await expect(page.locator('.cell').nth(3)).toHaveClass(/current/);
   });
 
+  test('4.5 в уроке 1.2 — переход к уроку 2.1', async ({ page }) => {
+    await page.evaluate(() => {
+      stats.parts['1.1'].cells = Array(100).fill('ok');
+      saveStats();
+    });
+    await page.click('#back');
+    await page.click('#open-part-1-2');
+    await setCells(page, 89);
+    await solve(page, true);
+    await tapEmpty(page);
+    await expect(page.locator('#congrats h2')).toHaveText('Поздравляем, вам доступен следующий урок!');
+    await expect(page.locator('#go-next')).toHaveText('Перейти к уроку 2.1');
+    await page.click('#go-next');
+    await expect(page.locator('#back')).toContainText('Урок 2.1');
+    await expect(page.locator('.word-option')).toHaveCount(6);
+    await page.click('#back');
+    await expect(page.locator('.lesson-title')).toHaveText('Где? Места и падежные формы');
+  });
+
   test('сохранённая пара из старого, большего набора не ломает урок', async ({ page }) => {
     await page.evaluate(() => {
       const saved = JSON.parse(localStorage.getItem('suomea.v3.lesson.1'));

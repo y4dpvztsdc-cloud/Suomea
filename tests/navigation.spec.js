@@ -86,12 +86,10 @@ test('кружки рейтинга: 4.4 оранжевый, 4.5 синий; у 
   await expect(page.locator('#open-part-1-2 .circle')).toHaveText('1.0');
 });
 
-test('следующий урок открывается, когда в 1.1 и 1.2 набрано 4.5', async ({ page }) => {
-  // Подставляем второй урок в список
-  await page.route('**/data/lessons.json', route => route.fulfill({
-    json: lessons.concat({ ...lessons[0], id: 2, title: 'Урок 2', subtitle: 'Проверка',
-      parts: [{ id: '2.1', title: 'Тест', set: 'affirmative' }] }),
-  }));
+test('урок 2 открывается, когда в 1.1 и 1.2 набрано 4.5', async ({ page }) => {
+  await expect(page.locator('.list-row')).toHaveCount(lessons.length);
+  for (const l of lessons.slice(1)) await expect(page.locator(`#lesson-${l.id}`)).toHaveClass(/locked/);
+
   await setProgress(page, { '1.1': 90, '1.2': 89 });
   await page.reload();
   const second = page.locator('#lesson-2');
@@ -103,7 +101,10 @@ test('следующий урок открывается, когда в 1.1 и 1
   await setProgress(page, { '1.1': 90, '1.2': 90 });
   await page.reload();
   await expect(page.locator('#lesson-2')).not.toHaveClass(/locked/);
+  await expect(page.locator('#lesson-3')).toHaveClass(/locked/);
   await page.click('#lesson-2');
   await expect(page.locator('#header-title')).toHaveText('Урок 2');
+  await expect(page.locator('.lesson-title')).toHaveText(lessons[1].subtitle);
   await expect(page.locator('#open-part-2-1')).toContainText('Урок 2.1');
+  await expect(page.locator('#open-part-2-2')).toHaveClass(/locked/);
 });

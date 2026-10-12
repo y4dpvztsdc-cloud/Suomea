@@ -1,0 +1,23 @@
+[
+  {"fi": "mies", "ru": "муж", "group": "family"},
+  {"fi": "vaimo", "ru": "жена", "group": "family"},
+  {"fi": "tänään", "ru": "сегодня", "group": "time"},
+  {"fi": "huomenna", "ru": "завтра", "group": "time"},
+  {"fi": "nyt", "ru": "сейчас", "group": "time"},
+  {"fi": "missä", "ru": "где", "group": "question"},
+  {"fi": "koti", "ru": "дом (свой)", "group": "home"},
+  {"fi": "asunto", "ru": "квартира", "group": "home"},
+  {"fi": "huone", "ru": "комната", "group": "home"},
+  {"fi": "mökki", "ru": "дача", "group": "home"},
+  {"fi": "koulu", "ru": "школа", "group": "city"},
+  {"fi": "sairaala", "ru": "больница", "group": "city"},
+  {"fi": "kauppa", "ru": "магазин", "group": "city"},
+  {"fi": "kaupunki", "ru": "город", "group": "city"},
+  {"fi": "ulkona", "ru": "на улице", "group": "city"},
+  {"fi": "auto", "ru": "машина", "group": "transport"},
+  {"fi": "bussi", "ru": "автобус", "group": "transport"},
+  {"fi": "työ", "ru": "работа", "group": "work"},
+  {"fi": "loma", "ru": "отпуск", "group": "work"},
+  {"fi": "Suomi", "ru": "Финляндия", "group": "country"},
+  {"fi": "Helsinki", "ru": "Хельсинки", "group": "country"}
+]
