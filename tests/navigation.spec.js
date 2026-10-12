@@ -26,7 +26,7 @@ test('экран урока: 1.1 утверждение, 1.2 отрицание 
   await expect(page.locator('#open-part-1-1 .circle')).toHaveText('0.0');
   await expect(page.locator('#open-part-1-2')).toContainText('Вопрос + отрицание');
   await expect(page.locator('#open-part-1-2')).toHaveClass(/locked/);
-  await expect(page.locator('#open-part-1-2')).toContainText('откроется при 4.5 в уроке 1.1');
+  await expect(page.locator('#open-part-1-2')).toContainText('Откроется при 4.5 в уроке 1.1');
   await expect(page.locator('#open-words')).toContainText('Учить новые слова');
   await expect(page.locator('#open-words .circle')).toHaveText('0%');
   await expect(page.locator('#open-description')).toContainText('Описание урока');
@@ -107,4 +107,50 @@ test('урок 2 открывается, когда в 1.1 и 1.2 набрано
   await expect(page.locator('.lesson-title')).toHaveText(lessons[1].subtitle);
   await expect(page.locator('#open-part-2-1')).toContainText('Урок 2.1');
   await expect(page.locator('#open-part-2-2')).toHaveClass(/locked/);
+});
+
+test('закрытые уроки показывают своё название', async ({ page }) => {
+  for (const l of lessons.slice(1)) {
+    const row = page.locator(`#lesson-${l.id}`);
+    await expect(row).toHaveClass(/locked/);
+    await expect(row.locator('.list-title')).toHaveText(l.title);
+    await expect(row.locator('.list-sub')).toHaveText(l.subtitle);
+  }
+  await page.click('#lesson-1');
+  await expect(page.locator('#open-part-1-2 .list-sub')).toHaveText('Вопрос + отрицание');
+});
+
+test('режим проверки: все уроки и подуроки открыты, настройка сохраняется', async ({ page }) => {
+  await page.click('#tab-settings');
+  await expect(page.locator('#tab-settings')).toHaveClass(/active/);
+  const toggle = page.locator('#test-mode');
+  await expect(toggle).not.toBeChecked();
+  await page.locator('.setting-row').click();
+  await expect(toggle).toBeChecked();
+  await expect(page.locator('#test-badge')).toHaveText('Режим проверки');
+
+  await page.reload();
+  await expect(page.locator('#test-badge')).toBeVisible();
+  for (const l of lessons) await expect(page.locator(`#lesson-${l.id}`)).not.toHaveClass(/locked/);
+  await page.click(`#lesson-${lessons.at(-1).id}`);
+  for (const p of lessons.at(-1).parts) {
+    await expect(page.locator(`#open-part-${p.id.replace('.', '-')}`)).not.toHaveClass(/locked/);
+  }
+  await page.click(`#open-part-${lessons.at(-1).parts[1].id.replace('.', '-')}`);
+  await expect(page.locator('.word-option')).toHaveCount(6);
+
+  // Выключаем — уроки снова закрыты
+  await page.click('#back');
+  await page.click('#back');
+  await page.click('#tab-settings');
+  await page.locator('.setting-row').click();
+  await expect(page.locator('#test-badge')).toHaveCount(0);
+  await page.click('#tab-lessons');
+  await expect(page.locator('#lesson-2')).toHaveClass(/locked/);
+});
+
+test('режим проверки по ссылке ?test=1', async ({ page }) => {
+  await page.goto('/?test=1');
+  await expect(page.locator('#test-badge')).toBeVisible();
+  await expect(page.locator(`#lesson-${lessons.at(-1).id}`)).not.toHaveClass(/locked/);
 });

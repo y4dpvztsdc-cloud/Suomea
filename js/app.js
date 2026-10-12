@@ -8,6 +8,7 @@ let loadedLessonId = null;
 let words = [];       // слова открытого урока
 let stats = null;     // сохранённый прогресс открытого урока: { wordsPct, parts: { '1.1': … } }
 let currentView = 'home';
+let testMode = loadTestMode(); // режим проверки: все уроки и подуроки открыты
 let homeTab = 'lessons';
 
 // ---------- прогресс в localStorage ----------
@@ -30,6 +31,25 @@ function saveStats() {
     localStorage.setItem(storageKey(lesson.id), JSON.stringify(stats));
   } catch (e) {
     // без хранилища прогресс живёт до перезагрузки страницы
+  }
+}
+
+// Режим проверки включается в «Настройках» или ссылкой с ?test=1
+function loadTestMode() {
+  if (new URLSearchParams(location.search).get('test') === '1') return true;
+  try {
+    return localStorage.getItem('suomea.testMode') === '1';
+  } catch (e) {
+    return false;
+  }
+}
+
+function setTestMode(on) {
+  testMode = on;
+  try {
+    localStorage.setItem('suomea.testMode', on ? '1' : '0');
+  } catch (e) {
+    // без хранилища режим действует до перезагрузки страницы
   }
 }
 
@@ -57,7 +77,7 @@ function lessonRating(l) {
 
 // Урок открыт, если в предыдущем уроке все подуроки набрали 4.5
 function isUnlocked(index) {
-  if (index === 0) return true;
+  if (index === 0 || testMode) return true;
   const prev = lessons[index - 1];
   const s = loadStats(prev.id);
   return prev.parts.every(p => storedPartRating(s, p.id) >= PASS_RATING);
@@ -65,7 +85,7 @@ function isUnlocked(index) {
 
 // Подурок открыт, если в предыдущем подуроке набрано 4.5
 function isPartUnlocked(index) {
-  return index === 0 || storedPartRating(stats, lesson.parts[index - 1].id) >= PASS_RATING;
+  return index === 0 || testMode || storedPartRating(stats, lesson.parts[index - 1].id) >= PASS_RATING;
 }
 
 // Следующий подурок: в этом уроке или первый подурок следующего урока
@@ -90,13 +110,16 @@ function renderTopbar({ title = '', back = null, backLabel = '', right = '', hom
     bar.className = 'topbar home';
     bar.innerHTML = `
       <h1>Suomea</h1>
+      ${testMode ? '<div class="test-badge" id="test-badge">Режим проверки</div>' : ''}
       <div class="segmented">
         <button id="tab-lessons" class="${homeTab === 'lessons' ? 'active' : ''}">Уроки</button>
         <button id="tab-dictionary" class="${homeTab === 'dictionary' ? 'active' : ''}">Словарь</button>
+        <button id="tab-settings" class="${homeTab === 'settings' ? 'active' : ''}">Настройки</button>
       </div>
     `;
     document.getElementById('tab-lessons').addEventListener('click', () => showHome('lessons'));
     document.getElementById('tab-dictionary').addEventListener('click', () => showHome('dictionary'));
+    document.getElementById('tab-settings').addEventListener('click', () => showHome('settings'));
     return;
   }
   bar.className = 'topbar';
@@ -127,6 +150,10 @@ function showHome(tab = homeTab) {
   renderTopbar({ home: true });
   renderBottombar('');
   const body = document.getElementById('app-body');
+  if (tab === 'settings') {
+    renderSettings();
+    return;
+  }
   if (tab === 'dictionary') {
     body.innerHTML = `<div class="wordlist" id="dictionary">Загрузка…</div>`;
     ensureLesson(lessons[0]).then(() => {
@@ -149,7 +176,8 @@ function showHome(tab = homeTab) {
           <span class="circle grey">${lockIcon()}</span>
           <span class="list-text">
             <span class="list-title">${l.title}</span>
-            <span class="list-sub">Откроется, когда в «${lessons[i - 1].title}» будет ${PASS_RATING.toFixed(1)}</span>
+            <span class="list-sub">${l.subtitle}</span>
+            <span class="list-hint">Откроется, когда в «${lessons[i - 1].title}» будет ${PASS_RATING.toFixed(1)}</span>
           </span>
         </div>
       `).join('')}
@@ -157,6 +185,25 @@ function showHome(tab = homeTab) {
   `;
   body.querySelectorAll('button.list-row').forEach(row => {
     row.addEventListener('click', () => openLesson(Number(row.dataset.id)));
+  });
+}
+
+function renderSettings() {
+  const body = document.getElementById('app-body');
+  body.innerHTML = `
+    <div class="list settings">
+      <label class="list-row setting-row" for="test-mode">
+        <span class="list-text">
+          <span class="list-title">Режим проверки</span>
+          <span class="list-sub">Все уроки и подуроки открыты сразу, без набора ${PASS_RATING.toFixed(1)}. Прогресс сохраняется как обычно.</span>
+        </span>
+        <input type="checkbox" class="switch" id="test-mode" ${testMode ? 'checked' : ''}>
+      </label>
+    </div>
+  `;
+  document.getElementById('test-mode').addEventListener('change', e => {
+    setTestMode(e.target.checked);
+    renderTopbar({ home: true });
   });
 }
 
@@ -227,7 +274,8 @@ function showLesson() {
         <span class="circle grey">${lockIcon()}</span>
         <span class="list-text">
           <span class="list-title">Урок ${p.id}</span>
-          <span class="list-sub">${p.title} · откроется при ${PASS_RATING.toFixed(1)} в уроке ${lesson.parts[j - 1].id}</span>
+          <span class="list-sub">${p.title}</span>
+          <span class="list-hint">Откроется при ${PASS_RATING.toFixed(1)} в уроке ${lesson.parts[j - 1].id}</span>
         </span>
       </div>
     `).join('');
