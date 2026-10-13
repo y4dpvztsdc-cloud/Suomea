@@ -1,0 +1,27 @@
+{
+ "groups": {
+  "pron": {"forms": ["minä", "sinä", "hän", "me", "te", "he", "tämä"]},
+  "olla": {"forms": ["olen", "olet", "on", "olemme", "olette", "ovat", "ole"]},
+  "neg": {"forms": ["en", "et", "ei", "emme", "ette", "eivät"]}
+ },
+ "parts": [
+  {"id": "statement", "title": "Утверждение", "pairs": [
+   {"q": {"fi": "Minä olen.", "ru": "Я есть."}},
+   {"q": {"fi": "Sinä olet.", "ru": "Ты есть."}},
+   {"q": {"fi": "Hän on.", "ru": "Он / она есть."}},
+   {"q": {"fi": "Me olemme.", "ru": "Мы есть."}},
+   {"q": {"fi": "Te olette.", "ru": "Вы есть."}},
+   {"q": {"fi": "He ovat.", "ru": "Они есть."}},
+   {"q": {"fi": "Tämä on.", "ru": "Это есть."}}
+  ]},
+  {"id": "negation", "title": "Отрицание", "pairs": [
+   {"q": {"fi": "Minä en ole.", "ru": "Я не есть."}},
+   {"q": {"fi": "Sinä et ole.", "ru": "Ты не есть."}},
+   {"q": {"fi": "Hän ei ole.", "ru": "Он / она не есть."}},
+   {"q": {"fi": "Me emme ole.", "ru": "Мы не есть."}},
+   {"q": {"fi": "Te ette ole.", "ru": "Вы не есть."}},
+   {"q": {"fi": "He eivät ole.", "ru": "Они не есть."}},
+   {"q": {"fi": "Tämä ei ole.", "ru": "Это не есть."}}
+  ]}
+ ]
+}

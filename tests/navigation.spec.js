@@ -48,11 +48,15 @@ test('описание урока', async ({ page }) => {
   await expect(page.locator('.lesson-title')).toBeVisible();
 });
 
-test('вкладка «Словарь» показывает слова урока', async ({ page }) => {
+test('вкладка «Словарь» показывает слова всех уроков по разделам', async ({ page }) => {
+  const withWords = lessons.filter(l => l.words);
+  const total = withWords.reduce((n, l) => n + require(`../${l.words}`).length, 0);
   await page.click('#tab-dictionary');
   await expect(page.locator('#tab-dictionary')).toHaveClass(/active/);
-  await expect(page.locator('.wordlist-row')).toHaveCount(words.length);
-  await expect(page.locator('.wordlist-row').first()).toContainText(words[0].fi);
+  await expect(page.locator('.wordlist-row')).toHaveCount(total);
+  await expect(page.locator('.wordlist-section')).toHaveCount(withWords.length);
+  await expect(page.locator('#dict-1 .wordlist-title')).toContainText('Урок 1');
+  await expect(page.locator('#dict-1 .wordlist-row').first()).toContainText(words[0].fi);
   await page.click('#tab-lessons');
   await expect(page.locator('#lesson-1')).toBeVisible();
 });
@@ -88,7 +92,7 @@ test('кружки рейтинга: 4.4 оранжевый, 4.5 синий; у 
 
 test('урок 2 открывается, когда в 1.1 и 1.2 набрано 4.5', async ({ page }) => {
   await expect(page.locator('.list-row')).toHaveCount(lessons.length);
-  for (const l of lessons.slice(1)) await expect(page.locator(`#lesson-${l.id}`)).toHaveClass(/locked/);
+  for (const l of lessons.filter(l => l.id >= 2)) await expect(page.locator(`#lesson-${l.id}`)).toHaveClass(/locked/);
 
   await setProgress(page, { '1.1': 90, '1.2': 89 });
   await page.reload();
@@ -104,13 +108,13 @@ test('урок 2 открывается, когда в 1.1 и 1.2 набрано
   await expect(page.locator('#lesson-3')).toHaveClass(/locked/);
   await page.click('#lesson-2');
   await expect(page.locator('#header-title')).toHaveText('Урок 2');
-  await expect(page.locator('.lesson-title')).toHaveText(lessons[1].subtitle);
+  await expect(page.locator('.lesson-title')).toHaveText(lessons.find(l => l.id === 2).subtitle);
   await expect(page.locator('#open-part-2-1')).toContainText('Урок 2.1');
   await expect(page.locator('#open-part-2-2')).toHaveClass(/locked/);
 });
 
 test('закрытые уроки показывают своё название', async ({ page }) => {
-  for (const l of lessons.slice(1)) {
+  for (const l of lessons.filter(l => l.id >= 2)) {
     const row = page.locator(`#lesson-${l.id}`);
     await expect(row).toHaveClass(/locked/);
     await expect(row.locator('.list-title')).toHaveText(l.title);
@@ -153,4 +157,19 @@ test('режим проверки по ссылке ?test=1', async ({ page }) =
   await page.goto('/?test=1');
   await expect(page.locator('#test-badge')).toBeVisible();
   await expect(page.locator(`#lesson-${lessons.at(-1).id}`)).not.toHaveClass(/locked/);
+});
+
+test('пре-урок: первый в списке, урок 1 открыт и без него', async ({ page }) => {
+  const rows = page.locator('.list-row');
+  await expect(rows.first()).toHaveAttribute('id', 'lesson-0');
+  await expect(page.locator('#lesson-0')).toContainText('Пре-урок');
+  await expect(page.locator('#lesson-0 .circle')).toHaveText('0%');
+  await expect(page.locator('#lesson-1')).not.toHaveClass(/locked/);
+
+  await page.click('#lesson-0');
+  await expect(page.locator('#open-part-0-1')).toContainText('Утверждения, затем отрицания');
+  await expect(page.locator('#open-words')).toHaveCount(0);
+  await page.click('#open-description');
+  await expect(page.locator('.description h2')).toContainText('Пре-урок');
+  await expect(page.locator('.description')).toContainText('Minä en olen');
 });

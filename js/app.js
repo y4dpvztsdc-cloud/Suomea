@@ -76,9 +76,17 @@ function lessonRating(l) {
 }
 
 // Урок открыт, если в предыдущем уроке все подуроки набрали 4.5
+// Предыдущий обязательный урок (пре-урок с "pre": true не закрывает следующие)
+function prevRequiredLesson(index) {
+  for (let i = index - 1; i >= 0; i--) {
+    if (!lessons[i].pre) return lessons[i];
+  }
+  return null;
+}
+
 function isUnlocked(index) {
-  if (index === 0 || testMode) return true;
-  const prev = lessons[index - 1];
+  const prev = prevRequiredLesson(index);
+  if (!prev || testMode) return true;
   const s = loadStats(prev.id);
   return prev.parts.every(p => storedPartRating(s, p.id) >= PASS_RATING);
 }
@@ -137,6 +145,13 @@ function renderBottombar(html) {
   bar.hidden = !html;
 }
 
+// Кружок тренажёра: процент выполненных заданий или галочка, когда всё сделано
+function drillCircle(state) {
+  if (state && state.done) return '<span class="circle blue">&#10003;</span>';
+  const pct = state && state.queue ? Math.round((state.pos / state.queue.length) * 100) : 0;
+  return `<span class="circle orange small">${pct}%</span>`;
+}
+
 function ratingCircle(value) {
   const cls = value >= PASS_RATING ? 'blue' : 'orange';
   return `<span class="circle ${cls}">${value.toFixed(1)}</span>`;
@@ -156,16 +171,17 @@ function showHome(tab = homeTab) {
   }
   if (tab === 'dictionary') {
     body.innerHTML = `<div class="wordlist" id="dictionary">Загрузка…</div>`;
-    ensureLesson(lessons[0]).then(() => {
-      if (currentView === 'home' && homeTab === 'dictionary') renderDictionary();
-    });
+    const withWords = lessons.filter(l => l.words);
+    Promise.all(withWords.map(l => loadJson(l.words))).then(lists => {
+      if (currentView === 'home' && homeTab === 'dictionary') renderDictionary(withWords, lists);
+    }).catch(showError);
     return;
   }
   body.innerHTML = `
     <div class="list">
       ${lessons.map((l, i) => isUnlocked(i) ? `
         <button class="list-row" id="lesson-${l.id}" data-id="${l.id}">
-          ${ratingCircle(lessonRating(l))}
+          ${l.pre ? drillCircle(loadStats(l.id).parts[l.parts[0].id]) : ratingCircle(lessonRating(l))}
           <span class="list-text">
             <span class="list-title">${l.title}</span>
             <span class="list-sub">${l.subtitle}</span>
@@ -177,7 +193,7 @@ function showHome(tab = homeTab) {
           <span class="list-text">
             <span class="list-title">${l.title}</span>
             <span class="list-sub">${l.subtitle}</span>
-            <span class="list-hint">Откроется, когда в «${lessons[i - 1].title}» будет ${PASS_RATING.toFixed(1)}</span>
+            <span class="list-hint">Откроется, когда в «${prevRequiredLesson(i).title}» будет ${PASS_RATING.toFixed(1)}</span>
           </span>
         </div>
       `).join('')}
@@ -207,11 +223,17 @@ function renderSettings() {
   });
 }
 
-function renderDictionary() {
-  document.getElementById('dictionary').innerHTML = words.map(w => `
-    <div class="wordlist-row">
-      <span class="fi">${w.fi}</span>
-      <span class="ru">${w.ru}</span>
+// Словарь — слова всех уроков, по разделам
+function renderDictionary(withWords, lists) {
+  document.getElementById('dictionary').innerHTML = withWords.map((l, i) => `
+    <div class="wordlist-section" id="dict-${l.id}">
+      <div class="wordlist-title">${l.title} · ${l.subtitle}</div>
+      ${lists[i].map(w => `
+        <div class="wordlist-row">
+          <span class="fi">${w.fi}</span>
+          <span class="ru">${w.ru}</span>
+        </div>
+      `).join('')}
     </div>
   `).join('');
 }
@@ -234,7 +256,7 @@ async function ensureLesson(l) {
   stats = loadStats(l.id);
   if (loadedLessonId === l.id) return;
   const [wordData, sentences, description] = await Promise.all([
-    loadJson(l.words),
+    l.words ? loadJson(l.words) : [],
     loadJson(l.sentences),
     loadText(l.description),
   ]);
@@ -262,7 +284,7 @@ function showLesson() {
   renderBottombar('');
   const partRows = lesson.parts.map((p, j) => isPartUnlocked(j) ? `
       <button class="list-row part-row" id="open-part-${p.id.replace('.', '-')}" data-part="${j}">
-        ${ratingCircle(storedPartRating(stats, p.id))}
+        ${p.mode === 'drill' ? drillCircle(stats.parts[p.id]) : ratingCircle(storedPartRating(stats, p.id))}
         <span class="list-text">
           <span class="list-title">Урок ${p.id}</span>
           <span class="list-sub">${p.title}</span>
@@ -283,11 +305,12 @@ function showLesson() {
     <div class="lesson-title">${lesson.subtitle}</div>
     <div class="list">
       ${partRows}
+      ${lesson.words ? `
       <button class="list-row" id="open-words">
         <span class="circle orange small">${stats.wordsPct}%</span>
         <span class="list-text"><span class="list-title">Учить новые слова</span></span>
         ${chevronRight()}
-      </button>
+      </button>` : ''}
       <button class="list-row" id="open-description">
         <span class="circle icon">${readerIcon()}</span>
         <span class="list-text"><span class="list-title">Описание урока</span></span>
@@ -298,7 +321,8 @@ function showLesson() {
   document.querySelectorAll('.part-row').forEach(row => {
     row.addEventListener('click', () => openPartScreen(lesson.parts[Number(row.dataset.part)]));
   });
-  document.getElementById('open-words').addEventListener('click', showWords);
+  const openWords = document.getElementById('open-words');
+  if (openWords) openWords.addEventListener('click', showWords);
   document.getElementById('open-description').addEventListener('click', () => showDescription(showLesson));
 }
 

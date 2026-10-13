@@ -6,7 +6,9 @@ const lessons = require('../data/lessons.json');
 const WORD = /[A-Za-zÅÄÖåäö]+/g;
 const read = p => JSON.parse(fs.readFileSync(path.join(__dirname, '..', p), 'utf8'));
 
-for (const lesson of lessons) {
+const regular = lessons.filter(l => !l.pre);
+
+for (const lesson of regular) {
   test.describe(`${lesson.title}: данные`, () => {
     const words = read(lesson.words);
     const data = read(lesson.sentences);
@@ -62,6 +64,42 @@ for (const lesson of lessons) {
   });
 }
 
+test.describe('Пре-урок: данные', () => {
+  const pre = lessons[0];
+  const data = read(pre.sentences);
+
+  test('стоит первым, необязательный, один подурок-тренажёр без слов', () => {
+    expect(pre.pre).toBe(true);
+    expect(pre.words).toBeUndefined();
+    expect(pre.parts).toHaveLength(1);
+    expect(pre.parts[0]).toMatchObject({ id: '0.1', mode: 'drill', sets: ['statement', 'negation'], repeat: 3 });
+    expect(fs.existsSync(path.join(__dirname, '..', pre.description))).toBe(true);
+  });
+
+  test('7 утверждений и 7 отрицаний с olla, без вопросов и ответов', () => {
+    const [st, ng] = data.parts;
+    expect(st.pairs.map(p => p.q.fi)).toEqual([
+      'Minä olen.', 'Sinä olet.', 'Hän on.', 'Me olemme.', 'Te olette.', 'He ovat.', 'Tämä on.',
+    ]);
+    expect(ng.pairs.map(p => p.q.fi)).toEqual([
+      'Minä en ole.', 'Sinä et ole.', 'Hän ei ole.', 'Me emme ole.', 'Te ette ole.', 'He eivät ole.', 'Tämä ei ole.',
+    ]);
+    for (const p of [...st.pairs, ...ng.pairs]) {
+      expect(p.a).toBeUndefined();
+      expect(p.q.fi).not.toMatch(/\?/);
+    }
+  });
+
+  test('слова в группах, хватает 5 неверных вариантов', () => {
+    const index = {};
+    Object.values(data.groups).forEach(g => g.forms.forEach(f => { index[f.toLowerCase()] = true; }));
+    for (const part of data.parts) {
+      for (const p of part.pairs) for (const w of p.q.fi.match(WORD)) expect(index[w.toLowerCase()], w).toBe(true);
+    }
+    Object.values(data.groups).forEach(g => expect(g.forms.length).toBeGreaterThanOrEqual(6));
+  });
+});
+
 test('все уроки открываются и показывают свои подуроки', async ({ page }) => {
   // Открываем все уроки: в каждом подуроке 4.5
   await page.addInitScript(lessons => {
@@ -86,11 +124,17 @@ test('все уроки открываются и показывают свои 
     await expect(page.locator('.lesson-title')).toHaveText(l.subtitle);
     for (const p of l.parts) {
       await page.click(`#open-part-${p.id.replace('.', '-')}`);
-      await expect(page.locator('#back')).toContainText(`Урок ${p.id}`);
+      await expect(page.locator('#back')).toContainText(p.mode === 'drill' ? l.title : `Урок ${p.id}`);
       await expect(page.locator('.word-option')).toHaveCount(6);
       const q = await page.evaluate(() => currentTask().fi);
-      expect(read(l.sentences).parts.find(s => s.id === p.set).pairs.some(x => x.q.fi === q)).toBe(true);
+      const sets = p.sets || [p.set];
+      expect(read(l.sentences).parts.filter(s => sets.includes(s.id)).some(s => s.pairs.some(x => x.q.fi === q))).toBe(true);
       await page.click('#back');
+    }
+    if (!l.words) {
+      await expect(page.locator('#open-words')).toHaveCount(0);
+      await page.click('#back');
+      continue;
     }
     await page.click('#open-words');
     await expect(page.locator('.option')).toHaveCount(6);

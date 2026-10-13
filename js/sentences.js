@@ -9,6 +9,10 @@
 // Пройдя 100 клеток, круг начинается заново и перезаписывает клетки по порядку,
 // так что красную клетку можно «перекрасить» на следующем круге.
 // Рейтинг = 0.1 звезды за каждые 2 голубые клетки, 5.0 — все 100 голубые.
+//
+// Подурок с "mode": "drill" (пре-урок) — тренажёр: каждое предложение наборов
+// из "sets" нужно составить верно "repeat" раз, сначала весь первый набор, затем
+// второй. После ошибки то же предложение даётся снова. Клетка = одно задание.
 
 const CELLS = 100;
 const MAX_ATTEMPTS = 3; // сколько раз подряд даётся одно предложение после ошибок
@@ -54,8 +58,51 @@ function setSentenceData(data) {
   });
 }
 
+function setPairs(setId) {
+  return sentenceData.parts.find(s => s.id === setId).pairs;
+}
+
 function partPairs(p = part) {
-  return sentenceData.parts.find(s => s.id === p.set).pairs;
+  return setPairs(p.set);
+}
+
+function isDrill(p = part) {
+  return p.mode === 'drill';
+}
+
+// ---------- тренажёр (пре-урок) ----------
+
+// Каждый набор по кругу «repeat» раз, внутри круга — случайный порядок,
+// одно и то же предложение не идёт два раза подряд
+function buildDrillQueue(p) {
+  const queue = [];
+  p.sets.forEach(setId => {
+    const count = setPairs(setId).length;
+    for (let r = 0; r < (p.repeat || 1); r++) {
+      const order = shuffle([...Array(count).keys()]);
+      const last = queue[queue.length - 1];
+      if (last && last.set === setId && last.i === order[0] && count > 1) {
+        [order[0], order[1]] = [order[1], order[0]];
+      }
+      order.forEach(i => queue.push({ set: setId, i }));
+    }
+  });
+  return queue;
+}
+
+function newDrillState(p) {
+  const queue = buildDrillQueue(p);
+  return { drill: true, queue, cells: queue.map(() => 'todo'), pos: 0, correct: 0, wrong: 0, done: false };
+}
+
+function drillExpectedLength(p) {
+  return p.sets.reduce((n, setId) => n + setPairs(setId).length * (p.repeat || 1), 0);
+}
+
+// Номер набора, к которому относится текущее задание (для подписи «Утверждение» / «Отрицание»)
+function drillSetTitle() {
+  const item = ps.queue[Math.min(ps.pos, ps.queue.length - 1)];
+  return sentenceData.parts.find(s => s.id === item.set).title;
 }
 
 // ---------- состояние подурока ----------
@@ -93,6 +140,13 @@ function partRating(state) {
 
 function openPart(p) {
   part = p;
+  if (isDrill(p)) {
+    ps = loadPartState(p.id);
+    if (!ps || !ps.drill || ps.queue.length !== drillExpectedLength(p)) ps = newDrillState(p);
+    savePartState(p.id, ps);
+    if (!ps.done) resetSentence();
+    return;
+  }
   ps = loadPartState(p.id) || newPartState();
   // Если набор предложений изменился (другое число пар) — начинаем выбор пар заново
   const count = partPairs().length;
@@ -119,6 +173,11 @@ function capitalize(word) {
 }
 
 function currentTask() {
+  if (ps.drill) {
+    const item = ps.queue[ps.pos];
+    const s = setPairs(item.set)[item.i].q;
+    return { ru: s.ru, fi: s.fi, tokens: tokenize(s.fi) };
+  }
   const pair = partPairs()[ps.pair];
   const s = ps.stage === 0 ? pair.q : pair.a;
   return { ru: s.ru, fi: s.fi, tokens: tokenize(s.fi) };
@@ -146,6 +205,10 @@ function pickWordOptions(token, position) {
 }
 
 function prepareOptions() {
+  if (ps.drill && ps.done) {
+    sOptions = [];
+    return;
+  }
   const task = currentTask();
   sOptions = sBuilt.length < task.tokens.length
     ? pickWordOptions(task.tokens[sBuilt.length], sBuilt.length)
@@ -169,6 +232,18 @@ function pickPraise() {
 // ---------- экран ----------
 
 function sentenceTopbar() {
+  if (ps.drill) {
+    renderTopbar({
+      back: showLesson,
+      backLabel: lesson.title,
+      title: ps.done ? '' : drillSetTitle(),
+      right: `
+        <span class="stat" title="Верно">${checkIcon()}<b id="stat-correct">${ps.correct}</b></span>
+        <span class="stat" title="Ошибки">${crossIcon()}<b id="stat-wrong">${ps.wrong}</b></span>
+      `,
+    });
+    return;
+  }
   renderTopbar({
     back: showLesson,
     backLabel: `Урок ${part.id}`,
@@ -189,6 +264,11 @@ function renderCells() {
 
 function renderSentences() {
   sentenceTopbar();
+  // Тренажёр выполнен: после похвалы за последнее задание — экран поздравления
+  if (ps.drill && ps.done && !sChecked) {
+    renderCongrats('drill');
+    return;
+  }
   renderBottombar(`
     <button class="barbtn" id="oops">${undoIcon()}Ой, ошибся</button>
     <button class="barbtn" id="help">${bookIcon()}Помощь</button>
@@ -288,6 +368,13 @@ function checkSentence() {
   sLastCorrect = task.tokens.every((t, i) => t.w.toLowerCase() === sBuilt[i].toLowerCase());
   sChecked = true;
   sCheckedTask = task;
+  if (ps.drill) {
+    checkDrill();
+    savePartState(part.id, ps);
+    speakFinnish(task.fi);
+    renderSentences();
+    return;
+  }
   ps.cells[ps.pos] = sLastCorrect ? 'ok' : 'err';
   if (sLastCorrect) {
     ps.correct++;
@@ -312,6 +399,31 @@ function checkSentence() {
   renderSentences();
 }
 
+// Тренажёр: верный ответ закрывает задание (клетка голубая) и открывает следующее,
+// после ошибки клетка красная и то же предложение даётся снова
+function checkDrill() {
+  if (sLastCorrect) {
+    ps.correct++;
+    sPraise = pickPraise();
+    ps.cells[ps.pos] = 'ok';
+    ps.pos++;
+    if (ps.pos >= ps.queue.length) {
+      ps.done = true;
+      sCongrats = 'drill';
+    }
+  } else {
+    ps.wrong++;
+    ps.cells[ps.pos] = 'err';
+  }
+}
+
+function restartDrill() {
+  ps = newDrillState(part);
+  savePartState(part.id, ps);
+  resetSentence();
+  renderSentences();
+}
+
 // Ответ занимает следующую клетку; после 100-й круг начинается заново
 function advanceCell() {
   ps.pos++;
@@ -329,7 +441,8 @@ function advanceTask() {
     return;
   }
   ps.attempts = 1;
-  if (ps.stage === 0) {
+  // У одиночного предложения (без ответа «б») сразу берётся следующее
+  if (ps.stage === 0 && partPairs()[ps.pair].a) {
     ps.stage = 1;
   } else {
     ps.stage = 0;
@@ -351,6 +464,22 @@ function renderCongrats(level) {
   renderBottombar('');
   const nextName = next ? `${next.part.id} «${next.part.title}»` : '';
   const body = document.getElementById('app-body');
+  if (level === 'drill') {
+    sentenceTopbar();
+    body.innerHTML = `
+      <div class="done-screen congrats" id="congrats">
+        <div class="big">&#127881;</div>
+        <h2>Пре-урок выполнен!</h2>
+        <p>Все утверждения и отрицания составлены по ${part.repeat || 1} раза. Глагол olla теперь знаком — можно переходить к уроку 1.</p>
+        ${next ? `<button class="restart-btn" id="go-next">Перейти к уроку ${next.part.id}</button>` : ''}
+        <button class="restart-btn secondary" id="restart-drill">Пройти ещё раз</button>
+      </div>
+    `;
+    document.getElementById('restart-drill').addEventListener('click', restartDrill);
+    const goNext = document.getElementById('go-next');
+    if (goNext) goNext.addEventListener('click', () => openNextPart(next));
+    return;
+  }
   if (level === '5.0') {
     body.innerHTML = `
       <div class="done-screen congrats" id="congrats">

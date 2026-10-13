@@ -256,6 +256,9 @@ button { font-family: inherit; }
 .description table.conj td { color: var(--text); padding-right: 12px; }
 .description table.conj tr:first-child td { color: var(--text-muted); font-size: 13px; }
 .description table.conj td:first-child { color: var(--text-muted); }
+.description table.forms td { padding: 3px 18px 3px 0; }
+.description table.forms td:first-child { color: var(--text-muted); }
+.description table.forms td:last-child { color: var(--text); }
 .description .note { color: var(--text-muted); font-size: 14px; }
 
 /* ---------- словарь ---------- */
@@ -268,6 +271,14 @@ button { font-family: inherit; }
   font-size: 16px;
 }
 .wordlist-row .fi { font-weight: 500; }
+.wordlist-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--header-dark);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 22px 0 4px;
+}
 .wordlist-row .ru { color: var(--text-muted); }
 
 /* ---------- варианты ответа (без рамок) ---------- */
