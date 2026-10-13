@@ -15,8 +15,9 @@ for (const lesson of regular) {
 
     test('файлы урока на месте, подуроки ссылаются на наборы предложений', () => {
       expect(fs.existsSync(path.join(__dirname, '..', lesson.description))).toBe(true);
-      expect(lesson.parts.map(p => p.id)).toEqual([`${lesson.id}.1`, `${lesson.id}.2`]);
-      lesson.parts.forEach(p => expect(data.parts.map(s => s.id)).toContain(p.set));
+      const rated = lesson.parts.filter(p => p.mode !== 'drill');
+      expect(rated.map(p => p.id)).toEqual([`${lesson.id}.1`, `${lesson.id}.2`]);
+      rated.forEach(p => expect(data.parts.map(s => s.id)).toContain(p.set));
     });
 
     test('словарь: у каждого слова fi, ru, group, слова не повторяются', () => {
@@ -64,42 +65,6 @@ for (const lesson of regular) {
   });
 }
 
-test.describe('Пре-урок: данные', () => {
-  const pre = lessons[0];
-  const data = read(pre.sentences);
-
-  test('стоит первым, необязательный, один подурок-тренажёр без слов', () => {
-    expect(pre.pre).toBe(true);
-    expect(pre.words).toBeUndefined();
-    expect(pre.parts).toHaveLength(1);
-    expect(pre.parts[0]).toMatchObject({ id: '0.1', mode: 'drill', sets: ['statement', 'negation'], repeat: 3 });
-    expect(fs.existsSync(path.join(__dirname, '..', pre.description))).toBe(true);
-  });
-
-  test('7 утверждений и 7 отрицаний с olla, без вопросов и ответов', () => {
-    const [st, ng] = data.parts;
-    expect(st.pairs.map(p => p.q.fi)).toEqual([
-      'Minä olen.', 'Sinä olet.', 'Hän on.', 'Me olemme.', 'Te olette.', 'He ovat.', 'Tämä on.',
-    ]);
-    expect(ng.pairs.map(p => p.q.fi)).toEqual([
-      'Minä en ole.', 'Sinä et ole.', 'Hän ei ole.', 'Me emme ole.', 'Te ette ole.', 'He eivät ole.', 'Tämä ei ole.',
-    ]);
-    for (const p of [...st.pairs, ...ng.pairs]) {
-      expect(p.a).toBeUndefined();
-      expect(p.q.fi).not.toMatch(/\?/);
-    }
-  });
-
-  test('слова в группах, хватает 5 неверных вариантов', () => {
-    const index = {};
-    Object.values(data.groups).forEach(g => g.forms.forEach(f => { index[f.toLowerCase()] = true; }));
-    for (const part of data.parts) {
-      for (const p of part.pairs) for (const w of p.q.fi.match(WORD)) expect(index[w.toLowerCase()], w).toBe(true);
-    }
-    Object.values(data.groups).forEach(g => expect(g.forms.length).toBeGreaterThanOrEqual(6));
-  });
-});
-
 test('все уроки открываются и показывают свои подуроки', async ({ page }) => {
   // Открываем все уроки: в каждом подуроке 4.5
   await page.addInitScript(lessons => {
@@ -128,7 +93,7 @@ test('все уроки открываются и показывают свои 
       await expect(page.locator('.word-option')).toHaveCount(6);
       const q = await page.evaluate(() => currentTask().fi);
       const sets = p.sets || [p.set];
-      expect(read(l.sentences).parts.filter(s => sets.includes(s.id)).some(s => s.pairs.some(x => x.q.fi === q))).toBe(true);
+      expect(read(p.source || l.sentences).parts.filter(s => sets.includes(s.id)).some(s => s.pairs.some(x => x.q.fi === q))).toBe(true);
       await page.click('#back');
     }
     if (!l.words) {

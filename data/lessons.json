@@ -1,25 +1,5 @@
 [
   {
-    "id": 0,
-    "title": "Пре-урок",
-    "subtitle": "Почувствовать глагол olla",
-    "pre": true,
-    "sentences": "data/lessons/0-sentences.json",
-    "description": "data/lessons/0-description.html",
-    "parts": [
-      {
-        "id": "0.1",
-        "title": "Утверждения, затем отрицания",
-        "mode": "drill",
-        "sets": [
-          "statement",
-          "negation"
-        ],
-        "repeat": 3
-      }
-    ]
-  },
-  {
     "id": 1,
     "title": "Урок 1",
     "subtitle": "Глагол olla: кто это и чьё это",
@@ -27,6 +7,18 @@
     "sentences": "data/lessons/1-sentences.json",
     "description": "data/lessons/1-description.html",
     "parts": [
+      {
+        "id": "1.0",
+        "title": "Почувствовать глагол olla",
+        "mode": "drill",
+        "source": "data/lessons/1-pre.json",
+        "sets": [
+          "statement",
+          "negation",
+          "question"
+        ],
+        "repeat": 3
+      },
       {
         "id": "1.1",
         "title": "Вопрос + утверждение",

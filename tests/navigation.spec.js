@@ -159,17 +159,3 @@ test('режим проверки по ссылке ?test=1', async ({ page }) =
   await expect(page.locator(`#lesson-${lessons.at(-1).id}`)).not.toHaveClass(/locked/);
 });
 
-test('пре-урок: первый в списке, урок 1 открыт и без него', async ({ page }) => {
-  const rows = page.locator('.list-row');
-  await expect(rows.first()).toHaveAttribute('id', 'lesson-0');
-  await expect(page.locator('#lesson-0')).toContainText('Пре-урок');
-  await expect(page.locator('#lesson-0 .circle')).toHaveText('0%');
-  await expect(page.locator('#lesson-1')).not.toHaveClass(/locked/);
-
-  await page.click('#lesson-0');
-  await expect(page.locator('#open-part-0-1')).toContainText('Утверждения, затем отрицания');
-  await expect(page.locator('#open-words')).toHaveCount(0);
-  await page.click('#open-description');
-  await expect(page.locator('.description h2')).toContainText('Пре-урок');
-  await expect(page.locator('.description')).toContainText('Minä en olen');
-});

@@ -69,10 +69,16 @@ function storedPartRating(lessonStats, partId) {
 }
 
 // Рейтинг урока в списке — среднее по подурокам
+// Подуроки со звёздами (пре-урок-тренажёр не входит в рейтинг и ничего не закрывает)
+function ratedParts(l) {
+  return l.parts.filter(p => p.mode !== 'drill');
+}
+
 function lessonRating(l) {
   const s = loadStats(l.id);
-  const sum = l.parts.reduce((acc, p) => acc + storedPartRating(s, p.id), 0);
-  return Math.floor((sum / l.parts.length) * 10 + 1e-9) / 10;
+  const parts = ratedParts(l);
+  const sum = parts.reduce((acc, p) => acc + storedPartRating(s, p.id), 0);
+  return Math.floor((sum / parts.length) * 10 + 1e-9) / 10;
 }
 
 // Урок открыт, если в предыдущем уроке все подуроки набрали 4.5
@@ -88,12 +94,21 @@ function isUnlocked(index) {
   const prev = prevRequiredLesson(index);
   if (!prev || testMode) return true;
   const s = loadStats(prev.id);
-  return prev.parts.every(p => storedPartRating(s, p.id) >= PASS_RATING);
+  return ratedParts(prev).every(p => storedPartRating(s, p.id) >= PASS_RATING);
 }
 
 // Подурок открыт, если в предыдущем подуроке набрано 4.5
+// Предыдущий подурок со звёздами — тот, что открывает этот
+function prevRatedPart(index) {
+  for (let j = index - 1; j >= 0; j--) {
+    if (lesson.parts[j].mode !== 'drill') return lesson.parts[j];
+  }
+  return null;
+}
+
 function isPartUnlocked(index) {
-  return index === 0 || testMode || storedPartRating(stats, lesson.parts[index - 1].id) >= PASS_RATING;
+  const prev = prevRatedPart(index);
+  return !prev || testMode || storedPartRating(stats, prev.id) >= PASS_RATING;
 }
 
 // Следующий подурок: в этом уроке или первый подурок следующего урока
@@ -148,7 +163,7 @@ function renderBottombar(html) {
 // Кружок тренажёра: процент выполненных заданий или галочка, когда всё сделано
 function drillCircle(state) {
   if (state && state.done) return '<span class="circle blue">&#10003;</span>';
-  const pct = state && state.queue ? Math.round((state.pos / state.queue.length) * 100) : 0;
+  const pct = state && state.total ? drillPct(state) : 0;
   return `<span class="circle orange small">${pct}%</span>`;
 }
 
@@ -255,13 +270,19 @@ async function ensureLesson(l) {
   lesson = l;
   stats = loadStats(l.id);
   if (loadedLessonId === l.id) return;
-  const [wordData, sentences, description] = await Promise.all([
+  // У подурока может быть свой файл предложений ("source"), например у пре-урока
+  const sources = [...new Set(l.parts.map(p => p.source).filter(Boolean))];
+  const [wordData, sentences, description, ...extra] = await Promise.all([
     l.words ? loadJson(l.words) : [],
     loadJson(l.sentences),
     loadText(l.description),
+    ...sources.map(loadJson),
   ]);
   words = wordData;
   l.descriptionHtml = description;
+  l.sentenceData = sentences;
+  l.sourceData = {};
+  sources.forEach((src, i) => { l.sourceData[src] = extra[i]; });
   setSentenceData(sentences);
   loadedLessonId = l.id;
   restart();
@@ -277,6 +298,10 @@ async function openLesson(id) {
   showLesson();
 }
 
+function partName(p) {
+  return p.mode === 'drill' ? 'Пре-урок' : `Урок ${p.id}`;
+}
+
 function showLesson() {
   currentView = 'lesson';
   stats = loadStats(lesson.id);
@@ -286,7 +311,7 @@ function showLesson() {
       <button class="list-row part-row" id="open-part-${p.id.replace('.', '-')}" data-part="${j}">
         ${p.mode === 'drill' ? drillCircle(stats.parts[p.id]) : ratingCircle(storedPartRating(stats, p.id))}
         <span class="list-text">
-          <span class="list-title">Урок ${p.id}</span>
+          <span class="list-title">${partName(p)}</span>
           <span class="list-sub">${p.title}</span>
         </span>
         ${chevronRight()}
@@ -295,9 +320,9 @@ function showLesson() {
       <div class="list-row locked" id="open-part-${p.id.replace('.', '-')}">
         <span class="circle grey">${lockIcon()}</span>
         <span class="list-text">
-          <span class="list-title">Урок ${p.id}</span>
+          <span class="list-title">${partName(p)}</span>
           <span class="list-sub">${p.title}</span>
-          <span class="list-hint">Откроется при ${PASS_RATING.toFixed(1)} в уроке ${lesson.parts[j - 1].id}</span>
+          <span class="list-hint">Откроется при ${PASS_RATING.toFixed(1)} в уроке ${prevRatedPart(j).id}</span>
         </span>
       </div>
     `).join('');
@@ -329,12 +354,13 @@ function showLesson() {
 // Из «Учить новые слова» — в первый открытый подурок, где ещё нет 4.5
 function continueSentences() {
   stats = loadStats(lesson.id);
-  const open = lesson.parts.filter((_, j) => isPartUnlocked(j));
+  const open = lesson.parts.filter((p, j) => p.mode !== 'drill' && isPartUnlocked(j));
   const target = open.find(p => storedPartRating(stats, p.id) < PASS_RATING) || open[open.length - 1];
   openPartScreen(target);
 }
 
 function openPartScreen(p) {
+  setSentenceData(p.source ? lesson.sourceData[p.source] : lesson.sentenceData);
   openPart(p);
   showSentences();
 }

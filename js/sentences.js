@@ -10,9 +10,12 @@
 // так что красную клетку можно «перекрасить» на следующем круге.
 // Рейтинг = 0.1 звезды за каждые 2 голубые клетки, 5.0 — все 100 голубые.
 //
-// Подурок с "mode": "drill" (пре-урок) — тренажёр: каждое предложение наборов
-// из "sets" нужно составить верно "repeat" раз, сначала весь первый набор, затем
-// второй. После ошибки то же предложение даётся снова. Клетка = одно задание.
+// Подурок с "mode": "drill" (пре-урок) — тренажёр с подсчётом как в «Учить новые
+// слова»: каждое предложение наборов из "sets" нужно составить верно "repeat" раз,
+// наборы идут по очереди (утверждения, отрицания, вопросы). Над предложением —
+// кружки его повторов; ошибка ставит красный крестик, и задание возвращается через
+// несколько шагов (в пределах своего набора), верный ответ потом меняет крестик на
+// синюю галочку. Прогресс внизу считает только верные ответы.
 
 const CELLS = 100;
 const MAX_ATTEMPTS = 3; // сколько раз подряд даётся одно предложение после ошибок
@@ -49,6 +52,7 @@ let sLastCorrect = false;
 let sPraise = null;
 let sCongrats = null;    // '4.5' | '5.0' — поздравление после этого ответа
 let sCheckedTask = null; // проверенное предложение (пока на экране результат)
+let sCheckedItem = null; // задание тренажёра, которое сейчас проверено
 
 function setSentenceData(data) {
   sentenceData = data;
@@ -92,11 +96,20 @@ function buildDrillQueue(p) {
 
 function newDrillState(p) {
   const queue = buildDrillQueue(p);
-  return { drill: true, queue, cells: queue.map(() => 'todo'), pos: 0, correct: 0, wrong: 0, done: false };
+  // progress['statement:0'] = [true, false, …] — кружки повторов предложения
+  return { drill: true, v: 2, queue, total: queue.length, progress: {}, pos: 0, correct: 0, wrong: 0, done: false };
 }
 
 function drillExpectedLength(p) {
   return p.sets.reduce((n, setId) => n + setPairs(setId).length * (p.repeat || 1), 0);
+}
+
+function drillKey(item) {
+  return `${item.set}:${item.i}`;
+}
+
+function drillPct(state) {
+  return Math.round((state.correct / state.total) * 100);
 }
 
 // Номер набора, к которому относится текущее задание (для подписи «Утверждение» / «Отрицание»)
@@ -142,7 +155,7 @@ function openPart(p) {
   part = p;
   if (isDrill(p)) {
     ps = loadPartState(p.id);
-    if (!ps || !ps.drill || ps.queue.length !== drillExpectedLength(p)) ps = newDrillState(p);
+    if (!ps || !ps.drill || ps.v !== 2 || ps.total !== drillExpectedLength(p)) ps = newDrillState(p);
     savePartState(p.id, ps);
     if (!ps.done) resetSentence();
     return;
@@ -255,6 +268,30 @@ function sentenceTopbar() {
   });
 }
 
+// Кружки повторов текущего предложения тренажёра (как в «Учить новые слова»)
+function renderDrillSlots(item) {
+  const progress = ps.progress[drillKey(item)] || [];
+  let slots = '';
+  for (let i = 0; i < (part.repeat || 1); i++) {
+    if (i < progress.length) {
+      slots += `<div class="slot ${progress[i] ? 'correct' : 'wrong'}">${progress[i] ? '&#10003;' : '&#10005;'}</div>`;
+    } else {
+      slots += '<div class="slot"></div>';
+    }
+  }
+  return `<div class="word-tracker drill-tracker"><div class="tracker-slots">${slots}</div></div>`;
+}
+
+function renderDrillProgress() {
+  const pct = drillPct(ps);
+  return `
+    <div class="progress-row drill-progress">
+      <div class="progress-pct">${pct}%</div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+    </div>
+  `;
+}
+
 function renderCells() {
   const cells = ps.cells.map((state, i) =>
     `<span class="cell ${state}${!sChecked && i === ps.pos ? ' current' : ''}"></span>`
@@ -313,6 +350,7 @@ function renderSentences() {
 
   document.getElementById('app-body').innerHTML = `
     <div class="sentence-screen" id="sentence-screen">
+      ${ps.drill ? renderDrillSlots(sChecked ? sCheckedItem : ps.queue[ps.pos]) : ''}
       <div class="sentence-ru">${task.ru}</div>
       <div class="answer-field${state}" id="built">
         <div class="built-words">${built}</div>
@@ -321,7 +359,7 @@ function renderSentences() {
       ${middle}
       ${translation}
       <div class="tap-hint">${hint}</div>
-      ${renderCells()}
+      ${ps.drill ? renderDrillProgress() : renderCells()}
     </div>
   `;
 
@@ -399,21 +437,32 @@ function checkSentence() {
   renderSentences();
 }
 
-// Тренажёр: верный ответ закрывает задание (клетка голубая) и открывает следующее,
-// после ошибки клетка красная и то же предложение даётся снова
+// Тренажёр: результат пишется в кружок повтора; ошибка возвращает задание
+// через несколько шагов, но не дальше конца своего набора
 function checkDrill() {
+  const item = ps.queue[ps.pos];
+  sCheckedItem = item;
+  const key = drillKey(item);
+  const progress = ps.progress[key] || (ps.progress[key] = []);
+  if (item.slot === undefined) {
+    item.slot = progress.length;
+    progress.push(sLastCorrect);
+  } else if (sLastCorrect) {
+    progress[item.slot] = true;
+  }
   if (sLastCorrect) {
     ps.correct++;
     sPraise = pickPraise();
-    ps.cells[ps.pos] = 'ok';
-    ps.pos++;
-    if (ps.pos >= ps.queue.length) {
-      ps.done = true;
-      sCongrats = 'drill';
-    }
   } else {
     ps.wrong++;
-    ps.cells[ps.pos] = 'err';
+    let setEnd = ps.pos + 1;
+    while (setEnd < ps.queue.length && ps.queue[setEnd].set === item.set) setEnd++;
+    ps.queue.splice(Math.min(ps.pos + 1 + RETRY_GAP, setEnd), 0, item);
+  }
+  ps.pos++;
+  if (ps.pos >= ps.queue.length) {
+    ps.done = true;
+    sCongrats = 'drill';
   }
 }
 
@@ -470,7 +519,7 @@ function renderCongrats(level) {
       <div class="done-screen congrats" id="congrats">
         <div class="big">&#127881;</div>
         <h2>Пре-урок выполнен!</h2>
-        <p>Все утверждения и отрицания составлены по ${part.repeat || 1} раза. Глагол olla теперь знаком — можно переходить к уроку 1.</p>
+        <p>Все утверждения, отрицания и вопросы составлены по ${part.repeat || 1} раза. Глагол olla теперь знаком — можно переходить к уроку ${next ? next.part.id : ''}.</p>
         ${next ? `<button class="restart-btn" id="go-next">Перейти к уроку ${next.part.id}</button>` : ''}
         <button class="restart-btn secondary" id="restart-drill">Пройти ещё раз</button>
       </div>

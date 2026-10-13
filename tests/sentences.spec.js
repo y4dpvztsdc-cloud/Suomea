@@ -416,7 +416,7 @@ test.describe('составление предложений', () => {
     const t = await task(page);
     await pick(page, t.tokens[0].w);
     await page.click('#help');
-    await expect(page.locator('.description h2')).toContainText('olla');
+    await expect(page.locator('.description h2').first()).toContainText('olla');
     await page.click('#back');
     await expect(page.locator('.sentence-ru')).toHaveText(t.ru);
     await expect(page.locator('.chip')).toHaveCount(1);

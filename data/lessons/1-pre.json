@@ -2,7 +2,8 @@
  "groups": {
   "pron": {"forms": ["minä", "sinä", "hän", "me", "te", "he", "tämä"]},
   "olla": {"forms": ["olen", "olet", "on", "olemme", "olette", "ovat", "ole"]},
-  "neg": {"forms": ["en", "et", "ei", "emme", "ette", "eivät"]}
+  "neg": {"forms": ["en", "et", "ei", "emme", "ette", "eivät"]},
+  "olla_q": {"forms": ["olenko", "oletko", "onko", "olemmeko", "oletteko", "ovatko"]}
  },
  "parts": [
   {"id": "statement", "title": "Утверждение", "pairs": [
@@ -22,6 +23,15 @@
    {"q": {"fi": "Te ette ole.", "ru": "Вы не есть."}},
    {"q": {"fi": "He eivät ole.", "ru": "Они не есть."}},
    {"q": {"fi": "Tämä ei ole.", "ru": "Это не есть."}}
+  ]},
+  {"id": "question", "title": "Вопрос", "pairs": [
+   {"q": {"fi": "Olenko minä?", "ru": "Я есть?"}},
+   {"q": {"fi": "Oletko sinä?", "ru": "Ты есть?"}},
+   {"q": {"fi": "Onko hän?", "ru": "Он / она есть?"}},
+   {"q": {"fi": "Olemmeko me?", "ru": "Мы есть?"}},
+   {"q": {"fi": "Oletteko te?", "ru": "Вы есть?"}},
+   {"q": {"fi": "Ovatko he?", "ru": "Они есть?"}},
+   {"q": {"fi": "Onko tämä?", "ru": "Это есть?"}}
   ]}
  ]
 }

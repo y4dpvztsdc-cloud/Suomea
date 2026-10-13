@@ -259,6 +259,9 @@ button { font-family: inherit; }
 .description table.forms td { padding: 3px 18px 3px 0; }
 .description table.forms td:first-child { color: var(--text-muted); }
 .description table.forms td:last-child { color: var(--text); }
+.description hr { border: none; border-top: 1px solid var(--border); margin: 32px 0 8px; }
+.drill-tracker { margin: 14px 0 0; }
+.drill-progress { padding-top: 4px; }
 .description .note { color: var(--text-muted); font-size: 14px; }
 
 /* ---------- словарь ---------- */
