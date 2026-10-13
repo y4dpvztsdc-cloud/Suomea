@@ -115,7 +115,7 @@ test.describe('составление предложений', () => {
 
   test('экран: русское предложение, пустое поле ответа, 6 вариантов, 100 клеток', async ({ page }) => {
     const t = await task(page);
-    await expect(page.locator('#back')).toContainText('Урок 1.1');
+    await expect(page.locator('#back')).toContainText('Урок 1+');
     await expect(page.locator('text=Часть 1 из 2')).toHaveCount(0);
     await expect(page.locator('.sentence-ru')).toHaveText(t.ru);
     await expect(page.locator('.chip')).toHaveCount(0);
@@ -315,17 +315,17 @@ test.describe('составление предложений', () => {
     await page.click('#back');
     await expect(page.locator('#open-part-1-2')).not.toHaveClass(/locked/);
     await page.click('#open-part-1-2');
-    await expect(page.locator('#back')).toContainText('Урок 1.2');
+    await expect(page.locator('#back')).toContainText('Урок 1−');
     const q = await task(page);
     expect(data.parts[1].pairs.some(p => p.q.fi === q.fi)).toBe(true);
   });
 
-  test('кнопка «Перейти к уроку 1.2» открывает отрицание', async ({ page }) => {
+  test('кнопка «Перейти: Урок 1−» открывает отрицание', async ({ page }) => {
     await setCells(page, 89);
     await solve(page, true);
     await tapEmpty(page);
     await page.click('#go-next');
-    await expect(page.locator('#back')).toContainText('Урок 1.2');
+    await expect(page.locator('#back')).toContainText('Урок 1−');
     await expect(page.locator('#stat-rating')).toHaveText('0.0');
   });
 
@@ -381,9 +381,9 @@ test.describe('составление предложений', () => {
     await solve(page, true);
     await tapEmpty(page);
     await expect(page.locator('#congrats h2')).toHaveText('Поздравляем, вам доступен следующий урок!');
-    await expect(page.locator('#go-next')).toHaveText('Перейти к уроку 2.1');
+    await expect(page.locator('#go-next')).toHaveText('Перейти: Урок 2+');
     await page.click('#go-next');
-    await expect(page.locator('#back')).toContainText('Урок 2.1');
+    await expect(page.locator('#back')).toContainText('Урок 2+');
     await expect(page.locator('.word-option')).toHaveCount(6);
     await page.click('#back');
     await expect(page.locator('.lesson-title')).toHaveText('Где? Места и падежные формы');

@@ -298,8 +298,9 @@ async function openLesson(id) {
   showLesson();
 }
 
+// Название подурока на экране: «Урок 1+», «Урок 1−», «Тренажёр глагола olla»
 function partName(p) {
-  return p.mode === 'drill' ? 'Пре-урок' : `Урок ${p.id}`;
+  return p.name || `Урок ${p.id}`;
 }
 
 function showLesson() {
@@ -322,20 +323,20 @@ function showLesson() {
         <span class="list-text">
           <span class="list-title">${partName(p)}</span>
           <span class="list-sub">${p.title}</span>
-          <span class="list-hint">Откроется при ${PASS_RATING.toFixed(1)} в уроке ${prevRatedPart(j).id}</span>
+          <span class="list-hint">Откроется при ${PASS_RATING.toFixed(1)} в «${partName(prevRatedPart(j))}»</span>
         </span>
       </div>
     `).join('');
   document.getElementById('app-body').innerHTML = `
     <div class="lesson-title">${lesson.subtitle}</div>
     <div class="list">
-      ${partRows}
       ${lesson.words ? `
       <button class="list-row" id="open-words">
         <span class="circle orange small">${stats.wordsPct}%</span>
-        <span class="list-text"><span class="list-title">Учить новые слова</span></span>
+        <span class="list-text"><span class="list-title">Слова урока</span></span>
         ${chevronRight()}
       </button>` : ''}
+      ${partRows}
       <button class="list-row" id="open-description">
         <span class="circle icon">${readerIcon()}</span>
         <span class="list-text"><span class="list-title">Описание урока</span></span>
@@ -351,7 +352,7 @@ function showLesson() {
   document.getElementById('open-description').addEventListener('click', () => showDescription(showLesson));
 }
 
-// Из «Учить новые слова» — в первый открытый подурок, где ещё нет 4.5
+// Из «Слов урока» — в первый открытый подурок со звёздами, где ещё нет 4.5
 function continueSentences() {
   stats = loadStats(lesson.id);
   const open = lesson.parts.filter((p, j) => p.mode !== 'drill' && isPartUnlocked(j));
@@ -380,7 +381,7 @@ async function openNextPart(next) {
 
 function showWords() {
   currentView = 'words';
-  renderTopbar({ back: showLesson, backLabel: lesson.title, right: '<span class="topbar-caption">Новые слова</span>' });
+  renderTopbar({ back: showLesson, backLabel: lesson.title, right: '<span class="topbar-caption">Слова урока</span>' });
   renderBottombar('');
   renderTrain();
 }

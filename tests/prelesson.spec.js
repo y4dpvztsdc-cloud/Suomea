@@ -130,12 +130,12 @@ test.describe('пре-урок: тренажёр olla', () => {
     first.forEach(w => expect(data.groups.olla_q.forms).toContain(w.toLowerCase()));
   });
 
-  test('100% — «Пре-урок выполнен!», переход к 1.1, галочка на кружке', async ({ page }) => {
+  test('100% — «Тренажёр выполнен!», переход к «Урок 1+», галочка на кружке', async ({ page }) => {
     await almostDone(page);
     await solve(page, true);
     await expect(page.locator('.progress-pct')).toHaveText('100%');
     await tapEmpty(page);
-    await expect(page.locator('#congrats h2')).toHaveText('Пре-урок выполнен!');
+    await expect(page.locator('#congrats h2')).toHaveText('Тренажёр выполнен!');
     await expect(page.locator('#congrats')).toContainText('утверждения, отрицания и вопросы');
 
     await page.reload();
@@ -143,7 +143,7 @@ test.describe('пре-урок: тренажёр olla', () => {
     await expect(page.locator('#open-part-1-0 .circle')).toHaveText('✓');
     await page.click('#open-part-1-0');
     await page.click('#go-next');
-    await expect(page.locator('#back')).toContainText('Урок 1.1');
+    await expect(page.locator('#back')).toContainText('Урок 1+');
   });
 
   test('«Пройти ещё раз» начинает заново', async ({ page }) => {
@@ -155,21 +155,23 @@ test.describe('пре-урок: тренажёр olla', () => {
     await expect(page.locator('.progress-pct')).toHaveText('0%');
   });
 
-  test('на экране урока: «Пре-урок» первым, процент; 1.1 открыт и без него', async ({ page }) => {
+  test('на экране урока: слова, тренажёр, урок 1+, урок 1−, описание; первые три открыты', async ({ page }) => {
     await solve(page, true);
     await tapEmpty(page);
     await page.click('#back');
-    const first = page.locator('.list-row').first();
-    await expect(first).toHaveAttribute('id', 'open-part-1-0');
-    await expect(first.locator('.list-title')).toHaveText('Пре-урок');
-    await expect(first.locator('.circle')).toHaveText('2%');
+    const ids = await page.locator('.list-row').evaluateAll(rows => rows.map(r => r.id));
+    expect(ids).toEqual(['open-words', 'open-part-1-0', 'open-part-1-1', 'open-part-1-2', 'open-description']);
+    const titles = await page.locator('.list-row .list-title').allTextContents();
+    expect(titles).toEqual(['Слова урока', 'Тренажёр глагола olla', 'Урок 1+', 'Урок 1−', 'Описание урока']);
+    await expect(page.locator('#open-part-1-0 .circle')).toHaveText('2%');
     await expect(page.locator('#open-part-1-1')).not.toHaveClass(/locked/);
-    await expect(page.locator('#open-part-1-2')).toContainText('Откроется при 4.5 в уроке 1.1');
+    await expect(page.locator('#open-part-1-2')).toHaveClass(/locked/);
+    await expect(page.locator('#open-part-1-2')).toContainText('Откроется при 4.5 в «Урок 1+»');
   });
 
   test('«Помощь» — описание для начинающих с шагом про вопрос', async ({ page }) => {
     await page.click('#help');
-    await expect(page.locator('.description')).toContainText('Пре-урок: почувствовать глагол olla');
+    await expect(page.locator('.description')).toContainText('Тренажёр глагола olla');
     await expect(page.locator('.description')).toContainText('Шаг 3. Вопрос');
     await expect(page.locator('.description')).toContainText('Minä en olen');
   });

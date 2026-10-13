@@ -259,7 +259,7 @@ function sentenceTopbar() {
   }
   renderTopbar({
     back: showLesson,
-    backLabel: `Урок ${part.id}`,
+    backLabel: partName(part),
     right: `
       <span class="stat" title="Рейтинг">${starIcon()}<b id="stat-rating">${partRating(ps).toFixed(1)}</b></span>
       <span class="stat" title="Верно">${checkIcon()}<b id="stat-correct">${ps.correct}</b></span>
@@ -511,16 +511,16 @@ function nextSentence() {
 function renderCongrats(level) {
   const next = nextPartAfter(part);
   renderBottombar('');
-  const nextName = next ? `${next.part.id} «${next.part.title}»` : '';
+  const nextName = next ? `«${partName(next.part)}»` : '';
   const body = document.getElementById('app-body');
   if (level === 'drill') {
     sentenceTopbar();
     body.innerHTML = `
       <div class="done-screen congrats" id="congrats">
         <div class="big">&#127881;</div>
-        <h2>Пре-урок выполнен!</h2>
-        <p>Все утверждения, отрицания и вопросы составлены по ${part.repeat || 1} раза. Глагол olla теперь знаком — можно переходить к уроку ${next ? next.part.id : ''}.</p>
-        ${next ? `<button class="restart-btn" id="go-next">Перейти к уроку ${next.part.id}</button>` : ''}
+        <h2>Тренажёр выполнен!</h2>
+        <p>Все утверждения, отрицания и вопросы составлены по ${part.repeat || 1} раза. Глагол olla теперь знаком — можно переходить ${next ? `к ${nextName}` : 'дальше'}.</p>
+        ${next ? `<button class="restart-btn" id="go-next">Перейти: ${partName(next.part)}</button>` : ''}
         <button class="restart-btn secondary" id="restart-drill">Пройти ещё раз</button>
       </div>
     `;
@@ -536,7 +536,7 @@ function renderCongrats(level) {
         <h2>Поздравляем, урок пройден!</h2>
         <p>Рейтинг 5.0 — 100 верных ответов подряд.</p>
         <button class="restart-btn" id="keep-going">Продолжить</button>
-        ${next ? `<button class="restart-btn secondary" id="go-next">Перейти к уроку ${next.part.id}</button>` : ''}
+        ${next ? `<button class="restart-btn secondary" id="go-next">Перейти: ${partName(next.part)}</button>` : ''}
       </div>
     `;
   } else {
@@ -545,9 +545,9 @@ function renderCongrats(level) {
         <div class="big">&#127881;</div>
         <h2>${next ? 'Поздравляем, вам доступен следующий урок!' : 'Поздравляем, вы набрали 4.5!'}</h2>
         <p>${next
-          ? `Урок ${nextName} открыт. Перейти к следующему или довести этот урок до совершенства?`
+          ? `${nextName} открыт. Перейти к следующему или довести этот урок до совершенства?`
           : 'Следующий урок скоро появится. Можно довести этот урок до совершенства — 5.0.'}</p>
-        ${next ? `<button class="restart-btn" id="go-next">Перейти к уроку ${next.part.id}</button>` : ''}
+        ${next ? `<button class="restart-btn" id="go-next">Перейти: ${partName(next.part)}</button>` : ''}
         <button class="restart-btn ${next ? 'secondary' : ''}" id="keep-going">Продолжить</button>
       </div>
     `;

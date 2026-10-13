@@ -12,7 +12,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('стартовый экран: слово, 6 вариантов, прогресс 0%', async ({ page }) => {
-  await expect(page.locator('.topbar-caption')).toHaveText('Новые слова');
+  await expect(page.locator('.topbar-caption')).toHaveText('Слова урока');
   await expect(page.locator('.word-fi')).not.toBeEmpty();
   await expect(page.locator('.slot')).toHaveCount(3);
   await expect(page.locator('.progress-pct')).toHaveText('0%');

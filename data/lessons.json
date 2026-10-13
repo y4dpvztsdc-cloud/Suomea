@@ -9,7 +9,7 @@
     "parts": [
       {
         "id": "1.0",
-        "title": "Почувствовать глагол olla",
+        "title": "Утверждение, отрицание, вопрос",
         "mode": "drill",
         "source": "data/lessons/1-pre.json",
         "sets": [
@@ -17,17 +17,20 @@
           "negation",
           "question"
         ],
-        "repeat": 3
+        "repeat": 3,
+        "name": "Тренажёр глагола olla"
       },
       {
         "id": "1.1",
         "title": "Вопрос + утверждение",
-        "set": "affirmative"
+        "set": "affirmative",
+        "name": "Урок 1+"
       },
       {
         "id": "1.2",
         "title": "Вопрос + отрицание",
-        "set": "negative"
+        "set": "negative",
+        "name": "Урок 1−"
       }
     ]
   },
@@ -42,12 +45,14 @@
       {
         "id": "2.1",
         "title": "Вопрос + утверждение",
-        "set": "affirmative"
+        "set": "affirmative",
+        "name": "Урок 2+"
       },
       {
         "id": "2.2",
         "title": "Вопрос + отрицание",
-        "set": "negative"
+        "set": "negative",
+        "name": "Урок 2−"
       }
     ]
   },
@@ -62,12 +67,14 @@
       {
         "id": "3.1",
         "title": "Вопрос + утверждение",
-        "set": "affirmative"
+        "set": "affirmative",
+        "name": "Урок 3+"
       },
       {
         "id": "3.2",
         "title": "Вопрос + отрицание",
-        "set": "negative"
+        "set": "negative",
+        "name": "Урок 3−"
       }
     ]
   },
@@ -82,12 +89,14 @@
       {
         "id": "4.1",
         "title": "Вопрос + утверждение",
-        "set": "affirmative"
+        "set": "affirmative",
+        "name": "Урок 4+"
       },
       {
         "id": "4.2",
         "title": "Вопрос + отрицание",
-        "set": "negative"
+        "set": "negative",
+        "name": "Урок 4−"
       }
     ]
   }

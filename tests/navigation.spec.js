@@ -21,13 +21,13 @@ test('экран урока: 1.1 утверждение, 1.2 отрицание 
   await page.click('#lesson-1');
   await expect(page.locator('#header-title')).toHaveText('Урок 1');
   await expect(page.locator('.lesson-title')).toHaveText('Глагол olla: кто это и чьё это');
-  await expect(page.locator('#open-part-1-1')).toContainText('Урок 1.1');
+  await expect(page.locator('#open-part-1-1')).toContainText('Урок 1+');
   await expect(page.locator('#open-part-1-1')).toContainText('Вопрос + утверждение');
   await expect(page.locator('#open-part-1-1 .circle')).toHaveText('0.0');
   await expect(page.locator('#open-part-1-2')).toContainText('Вопрос + отрицание');
   await expect(page.locator('#open-part-1-2')).toHaveClass(/locked/);
-  await expect(page.locator('#open-part-1-2')).toContainText('Откроется при 4.5 в уроке 1.1');
-  await expect(page.locator('#open-words')).toContainText('Учить новые слова');
+  await expect(page.locator('#open-part-1-2')).toContainText('Откроется при 4.5 в «Урок 1+»');
+  await expect(page.locator('#open-words')).toContainText('Слова урока');
   await expect(page.locator('#open-words .circle')).toHaveText('0%');
   await expect(page.locator('#open-description')).toContainText('Описание урока');
 
@@ -109,7 +109,7 @@ test('урок 2 открывается, когда в 1.1 и 1.2 набрано
   await page.click('#lesson-2');
   await expect(page.locator('#header-title')).toHaveText('Урок 2');
   await expect(page.locator('.lesson-title')).toHaveText(lessons.find(l => l.id === 2).subtitle);
-  await expect(page.locator('#open-part-2-1')).toContainText('Урок 2.1');
+  await expect(page.locator('#open-part-2-1')).toContainText('Урок 2+');
   await expect(page.locator('#open-part-2-2')).toHaveClass(/locked/);
 });
 
@@ -159,3 +159,16 @@ test('режим проверки по ссылке ?test=1', async ({ page }) =
   await expect(page.locator(`#lesson-${lessons.at(-1).id}`)).not.toHaveClass(/locked/);
 });
 
+
+test('уроки 2–4: слова, урок N+, урок N− (без тренажёра)', async ({ page }) => {
+  await page.click('#tab-settings');
+  await page.locator('.setting-row').click(); // режим проверки, чтобы открыть уроки
+  await page.click('#tab-lessons');
+  for (const l of lessons.filter(x => x.id >= 2)) {
+    await page.click(`#lesson-${l.id}`);
+    await expect(page.locator('.lesson-title')).toHaveText(l.subtitle);
+    const titles = await page.locator('.list-row .list-title').allTextContents();
+    expect(titles).toEqual(['Слова урока', `Урок ${l.id}+`, `Урок ${l.id}−`, 'Описание урока']);
+    await page.click('#back');
+  }
+});

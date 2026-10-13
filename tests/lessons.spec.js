@@ -89,7 +89,7 @@ test('все уроки открываются и показывают свои 
     await expect(page.locator('.lesson-title')).toHaveText(l.subtitle);
     for (const p of l.parts) {
       await page.click(`#open-part-${p.id.replace('.', '-')}`);
-      await expect(page.locator('#back')).toContainText(p.mode === 'drill' ? l.title : `Урок ${p.id}`);
+      await expect(page.locator('#back')).toContainText(p.mode === 'drill' ? l.title : p.name);
       await expect(page.locator('.word-option')).toHaveCount(6);
       const q = await page.evaluate(() => currentTask().fi);
       const sets = p.sets || [p.set];
