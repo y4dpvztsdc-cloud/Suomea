@@ -1,0 +1,23 @@
+[
+  {"fi": "asua", "ru": "жить", "group": "verb"},
+  {"fi": "millainen", "ru": "какой / какая", "group": "question"},
+  {"fi": "millaisessa", "ru": "в каком / в какой", "group": "question"},
+  {"fi": "talo", "ru": "дом (здание)", "group": "home"},
+  {"fi": "kylä", "ru": "деревня / село", "group": "home"},
+  {"fi": "hotelli", "ru": "отель", "group": "home"},
+  {"fi": "asuntola", "ru": "общежитие", "group": "home"},
+  {"fi": "Tampere", "ru": "Тампере", "group": "city"},
+  {"fi": "Vantaa", "ru": "Вантаа", "group": "city"},
+  {"fi": "Espoo", "ru": "Эспоо", "group": "city"},
+  {"fi": "mukava", "ru": "приятный", "group": "adjective"},
+  {"fi": "epämukava", "ru": "неприятный", "group": "adjective"},
+  {"fi": "korkea", "ru": "высокий", "group": "adjective"},
+  {"fi": "matala", "ru": "низкий", "group": "adjective"},
+  {"fi": "kesä", "ru": "лето", "group": "season"},
+  {"fi": "syksy", "ru": "осень", "group": "season"},
+  {"fi": "talvi", "ru": "зима", "group": "season"},
+  {"fi": "kevät", "ru": "весна", "group": "season"},
+  {"fi": "vielä", "ru": "ещё", "group": "adverb"},
+  {"fi": "jo", "ru": "уже", "group": "adverb"},
+  {"fi": "enää", "ru": "больше (не)", "group": "adverb"}
+]

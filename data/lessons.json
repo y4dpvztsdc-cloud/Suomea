@@ -99,5 +99,27 @@
         "name": "Урок 4−"
       }
     ]
+  },
+  {
+    "id": 5,
+    "title": "Урок 5",
+    "subtitle": "Глагол asua и вопрос millainen",
+    "words": "data/lessons/5-words.json",
+    "sentences": "data/lessons/5-sentences.json",
+    "description": "data/lessons/5-description.html",
+    "parts": [
+      {
+        "id": "5.1",
+        "title": "Вопрос + утверждение",
+        "set": "affirmative",
+        "name": "Урок 5+"
+      },
+      {
+        "id": "5.2",
+        "title": "Вопрос + отрицание",
+        "set": "negative",
+        "name": "Урок 5−"
+      }
+    ]
   }
 ]

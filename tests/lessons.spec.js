@@ -41,7 +41,7 @@ for (const lesson of regular) {
           expect(pair.a.ru).not.toMatch(/^(Нет|Да), (Он|Она|Они)\b/);
         }
       }
-      neg.pairs.forEach(p => expect(p.a.fi).toMatch(/^(En|Et|Ei|Emme|Ette|Eivät),/));
+      neg.pairs.forEach(p => expect(p.a.fi).toMatch(/^(En|Et|Ei|Emme|Ette|Eivät)\b/));
     });
 
     test('каждое слово предложений ровно в одной группе, в группах хватает вариантов', () => {
@@ -108,4 +108,18 @@ test('все уроки открываются и показывают свои 
     await page.click('#back');
     await page.click('#back');
   }
+});
+
+test('урок 4: половина отрицательных ответов — короткие, через vaan', () => {
+  const neg = read('data/lessons/4-sentences.json').parts[1].pairs;
+  const short = neg.filter(p => /^Ei \w+, vaan \w+\.$/u.test(p.a.fi.normalize()) || /, vaan /.test(p.a.fi));
+  expect(short.length).toBe(50);
+  expect(neg[0].a.fi).toBe('Ei uusi, vaan vanha.');
+});
+
+test('урок 5: asua, millainen, времена года, vielä/enää', () => {
+  const data = read('data/lessons/5-sentences.json');
+  const all = data.parts.flatMap(p => p.pairs.flatMap(x => [x.q.fi, x.a.fi])).join(' ');
+  for (const w of ['asun', 'asuu', 'Millaisessa', 'talvella', 'enää', 'Tampereella']) expect(all).toContain(w);
+  expect(read('data/lessons/5-words.json')).toHaveLength(21);
 });
